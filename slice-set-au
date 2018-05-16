@@ -137,7 +137,7 @@ The pseudo 2D result can be processed with the command XF2M. You can then go to 
 
 if(debug=1)
 {
-	GETSTRING("Flag set to debug mode. No acquisition will be run. Do you want to switch to switch to aquisition mode? (yes/no",tmpstr);
+	GETSTRING("Flag set to debug mode. No acquisition will be run. Do you want to switch to switch to acquisition mode? (yes/no",tmpstr);
 	if ( !strcmp(tmpstr,"yes") )
 	{
 		debug=0;
@@ -218,7 +218,7 @@ while (choice_ok != 1) //have to get one thing correct...
 		else {
 		     choice_ok++;
 		}
-/*I don't think this is needed. The bandwdth of the region to be observed should be independent of slice width*/
+/*I don't think this is needed. The bandwidth of the region to be observed should be independent of slice width*/
 /*
 	tmpfloat = ( (offset_hz*2)/((tmp_int*2)+1) );
 	if ( (tmpfloat < bandwidth_hz) )
