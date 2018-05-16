@@ -1,0 +1,127 @@
+static char SCCSid[] = "%Z%%M%    %I%    %G%    Mark Vine, GlaxoSmithKline";
+//------------------------------------------------------------------------------
+//
+// dpd - delete processed data non-interactively.
+//
+// Deletes all specified processed data for the current disk and user
+// Dataset name patterns, expnos and procnos specified on the commandline
+//
+// Usage: dpd dataset [expnos [procnos]]
+//
+// Examples:
+// 
+//  dpd   Deletes all processed data in all datasets 
+//     in the current users' data directory
+//
+//  dpd CASS_*         Deletes all processed data in CASS_* datasets
+//
+//  dpd CASS_* 1[234] Deletes processed data from all procnos in
+//     expnos 12, 13 and 14, in all CASS_* datasets
+//
+//  dpd CASS_* 1[0-4] Deletes processed data from all procnos in
+//     expnos 10, 11, 12, 13 and 14, in all CASS_* 
+//     datasets
+//
+//  dpd * * 200  Deletes all processed data in procno 200 of
+//     all datasets and expnos
+//
+// Note that the processed data removal uses the Bruker-provided
+// "unlinkpr" function. This function is very simplistic, with no
+// error checking or confirmation of data removal.
+//
+//------------------------------------------------------------------------------
+
+
+char **nameList;
+char **expnoList;
+char **procnoList;
+
+char datasetPath[PATH_MAX];
+char dataDirPath[PATH_MAX];
+char expnoPath[PATH_MAX];
+char pdataPath[PATH_MAX];
+char procnoPath[PATH_MAX];
+
+char datasetPattern[PATH_MAX];   // dataset names (regexp allowed)
+char expnoPattern[PATH_MAX];   // expno numbers (numeric regexp allowed)
+char procnoPattern[PATH_MAX];
+
+int numOfNames = 0;
+int numOfExpnos = 0;
+int numOfProcnos = 0;
+
+int testExpno = 0;
+int testProcno = 0;
+
+int i, j, k;     // loop counters
+
+char szStatusMsg[BUFSIZ];
+
+
+//------------------------------------------------------------------------------
+// process the commandline
+//------------------------------------------------------------------------------
+
+
+strcpy(datasetPattern,"/dir");   // defaults - match all directories 
+strcpy(expnoPattern,"/dir");
+strcpy(procnoPattern,"/dir");
+
+if (cmd[0] != NULL)                             // have some arguments
+    sscanf(cmd,"%s %s %s",datasetPattern,expnoPattern,procnoPattern);
+
+
+//------------------------------------------------------------------------------
+
+
+GETCURDATA
+
+sprintf(dataDirPath,"%s/data/%s/%s",disk,user,type);
+numOfNames = getdir(dataDirPath,&nameList,datasetPattern);
+if (numOfNames > 0)
+{
+    for (i = 0; i < numOfNames; i++)
+    {
+ sprintf(datasetPath,"%s/%s",dataDirPath,nameList[i]);
+ numOfExpnos = getdir(datasetPath,&expnoList,expnoPattern);
+ if (numOfExpnos > 0)
+ {
+     for (j = 0; j < numOfExpnos; j++)
+     {
+  sprintf(pdataPath,"%s/%s/pdata",datasetPath,expnoList[j]);
+  numOfProcnos = getdir(pdataPath,&procnoList,procnoPattern);
+  if (numOfProcnos > 0)
+  {
+      for (k = 0; k < numOfProcnos; k++)
+          {
+   testExpno = atoi(expnoList[j]);
+   testProcno = atoi(procnoList[k]);
+
+   sprintf(procnoPath,"%s/%s",pdataPath,procnoList[k]);
+   DATASET(nameList[i],testExpno,testProcno,disk,user)
+   GETCURDATA
+
+   sprintf(szStatusMsg,"Deleting processed data from %s",procnoPath);
+   Show_status(szStatusMsg);
+
+   unlinkpr(procnoPath); // now delete the processed data
+          } 
+      freedir(procnoList);
+  }
+     }
+     freedir(expnoList);
+ }
+    }
+    freedir(nameList);
+}
+
+QUIT
+
+
+//------------------------------------------------------------------------------
+
+
+#include <inc/sysutil>
+
+
+//-----------------------------------------------------------------------

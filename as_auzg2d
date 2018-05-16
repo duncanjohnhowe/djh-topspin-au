@@ -1,0 +1,17 @@
+/*update jup.txt*/
+/*Sean Lynn 11/1/2007*/
+
+char pulprog[20];
+float DE;
+
+GETCURDATA
+XAU("as_juptxt")
+FETCHPAR("PULPROG", pulprog)
+STOREPAR("PULPROG", "zg")
+FETCHPAR("DE",&DE)
+STOREPAR("DE",30.0)
+RGA
+STOREPAR("DE",DE)
+STOREPAR("PULPROG", pulprog)
+ZG
+QUIT

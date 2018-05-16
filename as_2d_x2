@@ -1,0 +1,25 @@
+/*
+Program:	as_2d_x2
+Version:	1.0
+Author:		Sean Lynn
+Date:     24/1/2007
+Description:	rescale 2D spectra x2 using levcalc to ensure plot get correct vertical scaling
+cf as_2d_d2
+*/
+int mode;
+float lev0;
+
+GETCURDATA
+FETCHPAR("PPARMOD", &mode)
+if ( mode != 1 )
+{
+	Proc_err (INFO_OPT, "This is not a 2D dataset \npparmod = %d ", mode);
+	sleep(2);
+	exit(1);
+}
+FETCHPAR("LEV0", &lev0)
+lev0 = lev0/2;
+STOREPAR("LEV0", lev0)
+LEVCALC
+VIEWDATA_SAMEWIN
+QUIT

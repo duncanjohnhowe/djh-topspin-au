@@ -1,0 +1,37 @@
+//#include unistd.h
+
+int multiple;
+int current_expno;
+int dest_expno;
+char dest_suffix[256];
+char new_dataset_name[PATH_MAX];
+char fid_path[PATH_MAX];
+char file_check[31];
+sprintf(file_check,"fid");
+
+GETCURDATA;
+current_expno=expno;
+multiple=Proc_err(QUESTION_OPT,"Taking expno=%i, enter the multiple to copy i.e. to copy 10,15,20,25... its 5.",expno);
+GETINT("Enter multiple :- ",multiple);
+GETINT("Starting expno for new dataset :-", dest_expno);
+GETSTRING("Enter suffix for new dataset :- ", dest_suffix);
+sprintf(new_dataset_name,"%s-%s",name,dest_suffix);
+
+sprintf(fid_path, "%s%s/%s/%i%/fid",disk,user,name,current_expno+multiple); //this is to check we can go once rounf the loop
+//sprintf(fid_path,"%s/%s",ACQUPATH(0), file_check );
+Proc_err(INFO_OPT,"fid path is - \n %s\n New dataset name is - \n%s",fid_path,new_dataset_name);
+while (access(fid_path, F_OK) == 0)
+{
+	Proc_err(INFO_OPT,"new name %s, new expno %i, procno %i, disk %s, user %s",new_dataset_name,dest_expno, procno, disk, user);
+	WRPA(new_dataset_name,dest_expno, procno, disk, user);
+	current_expno=current_expno+multiple;
+	dest_expno++;
+	DATASET(name,current_expno,procno,disk,user);
+	SETCURDATA
+	GETCURDATA
+	VIEWDATA_SAMEWIN 
+	sprintf(fid_path, "%s%s/%s/%i%/fid",disk,user,name,current_expno+multiple);
+	
+}
+
+QUIT

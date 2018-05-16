@@ -1,0 +1,4 @@
+char homedir[256];
+sprintf(homedir, PathSystemHome() );
+Proc_err(DEF_ERR_OPT, homedir);
+QUIT

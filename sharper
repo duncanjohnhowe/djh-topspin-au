@@ -1,0 +1,12 @@
+//mark Vine
+
+GETCURDATA
+
+STOREPAR("WDW",2);
+STOREPAR("LB",-1.0);
+STOREPAR("GB",0.3);
+
+GFP
+VIEWDATA
+QUIT
+

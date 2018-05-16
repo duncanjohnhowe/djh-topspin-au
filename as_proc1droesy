@@ -1,0 +1,27 @@
+/* ========================================================================== */
+/*
+title:	as_proc1droesy
+author:	Sean Lynn
+description:	autoprocesses selrogp experiment
+            
+/*
+/* ========================================================================== */
+
+int cur_expno;
+float Hsr;
+
+GETCURDATA
+
+ //process data
+ cur_expno = expno;
+ DATASET(name,10,1,disk,user)
+ FETCHPAR("SR", &Hsr)
+ DATASET(name,cur_expno,1,disk,user)
+ STOREPAR("SR",Hsr)
+ EFP
+ APKS
+ XAU("as_phasenoe")
+ STOREPAR("CY",3.0)
+ DATASET2(name,10,1,disk,user)
+
+QUIT

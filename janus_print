@@ -1,0 +1,219 @@
+/*runs a processing queue*/
+/*janus_sx will append to the processing list if the options are right*/
+/*janus sx will either write the pdf or the plot option depending*/
+/*janus_reproc appends to processing que if running, and does it with the plot option always*/
+/*MILESTOBNE - read defaults-csv.txt file to get file locations*/
+/*remove cruft						*/
+/*maybe abstract pulseprogram reading to another au program def_proc */
+/*def-proc will do defualt processing base on the pulse program	*/
+
+#include <stdio.h>
+#include <inc/sysutil>
+
+void master_proc(char specno,char pdisk,char puser,char plot_or_pdf);
+
+char defaultsfile[256]="f:/chemist/defaults-csv.txt";
+char lockfile[100],proclist[100], temp_proclist[100],in_data[1024];
+char *file_data,*field;
+char prefix[40],diskunit[40],suser[40],tunefile[40];
+char archpath[80],archive[20],gradshim[20],shimset[40];
+char specno [100],pdisk[100], puser[100],plot_or_pdf[100];
+int finish;
+int ch;
+
+FILE *proclock = NULL;
+FILE *plist = NULL;
+FILE *temp = NULL;
+FILE *fdef = NULL;
+
+//defs below for masterproc
+char homepul[1023]="", pul[1023]="", directory[1023]="", data_File[1023]="", nuc1[1023]="";
+char nuc2[1023]="",au_p[1023]="";
+char status[1023]="";
+char pdfname[PATH_MAX]="";
+int mode, dexpno, i_expno, i_limit, Hexpno, Cexpno,i;
+float Hsr, Csr;
+
+
+/*--- Get defaults from the defaults file ----------------------*/
+//strcpy( defaultsfile, def_file );
+fdef = fopen( defaultsfile, "r" );
+rewind(fdef); //go to begining of file
+file_data = fgets(in_data, 1024, fdef); //read in file as a continuous string
+fclose(fdef); //close the file
+//file is open, read data
+field = strtok(in_data, ",");
+strcpy( prefix,field);
+Proc_err(INFO_OPT,"prefix is %s",prefix);
+field = strtok(NULL, ",");
+sscanf(field, "%s", &diskunit);
+	Proc_err(INFO_OPT,"diskunit is %s",diskunit);
+field = strtok(NULL, ",");
+sscanf(field,"%s", &suser);
+	Proc_err(INFO_OPT,"suser is %s",suser);
+field = strtok(NULL,",");
+sscanf(field,"%s",&tunefile);
+	Proc_err(INFO_OPT,"tunefile is %s", tunefile);
+field = strtok(NULL,",");
+sscanf(field,"%s",&shimset);
+	Proc_err(INFO_OPT,"shimset is %s", shimset);
+field = strtok(NULL,",");
+sscanf(field,"%s",&archpath);
+	Proc_err(INFO_OPT,"archpath is %s", archpath);
+field = strtok(NULL,",");
+sscanf(field,"%s",&archive);
+	Proc_err(INFO_OPT,"archive is %s", archive);
+field = strtok(NULL,",");
+sscanf(field,"%s",&gradshim);
+	Proc_err(INFO_OPT,"gradshim is %s", gradshim);
+Proc_err(INFO_OPT,"parsed defaults file");
+
+
+sprintf(lockfile, "%s%s\\janusproclock.txt",diskunit,suser);
+sprintf(proclist, "%s%s\\proclist.txt",diskunit,suser);
+sprintf(temp_proclist, "%s%s\\temp.txt",diskunit,suser);
+sprintf(status,"processing");
+Proc_err (INFO_OPT,lockfile);
+Proc_err (INFO_OPT,status);
+proclock = fopen(lockfile,"w+");
+if (proclock == NULL)
+	{
+	Proc_err(INFO_OPT, "can't open %s",lockfile);
+	exit(1);
+	}
+	
+fprintf(proclock,status);
+fclose(proclock);
+
+finish = 0; //go on trying to read lines 
+while ( finish != 1)
+{	
+	//read data from first line of processing list proclist
+	plist = fopen (proclist,"r");
+	if (plist == NULL)
+	{
+		Proc_err(INFO_OPT, "Can't open %s to read processing list", proclist);
+		//maybe error here to a file instead of exiting, maybe email via whoopwhoop
+		exit(1);
+	}
+	//Proc_err(INFO_OPT,"checking if file is not empty");
+	if ( (ch=fgetc(plist)) != EOF ) {
+		Proc_err(INFO_OPT,"file is not empty, so do something");
+		rewind(plist); //go to begining of file
+		file_data = fgets(in_data, 200, plist);
+		fclose(plist);
+		Proc_err(INFO_OPT,"parsing %s file",proclist);
+		//file is open, read data
+		field = strtok(in_data, ",");
+		strcpy( specno,field);
+		field = strtok(NULL, ",");
+		sscanf(field, "%s", &pdisk);
+		field = strtok(NULL, ",");
+		sscanf(field,"%s", &puser);
+		field = strtok(NULL,",");
+		sscanf(field,"%s",&plot_or_pdf);
+		Proc_err(INFO_OPT,"parsed %s file",proclist);
+		DATASET (specno, 10, 1, pdisk,puser);
+		GETCURDATA
+		VIEWDATA_SAMEWIN
+		//CHECK don't think we need the below variables
+		Hexpno=0;
+		Cexpno=0;
+		i_expno=1;
+		Hsr=0.0;
+		Csr=0.0;
+		dexpno = expno;
+		FETCHPAR("PULPROG", &homepul)
+		/*scans from i_expno to the highest directory (or 999) processing what it finds */
+		(void) sprintf(directory, "%s\\%s", pdisk, specno);
+		/*for (i=0; i < strlen(directory);i++)
+		{
+			if(directory[i]=='\\')
+			{
+				directory[i]='/';
+			}
+		}
+		*/
+		Proc_err (INFO_OPT,"%s", directory);
+		i_limit = gethighest(directory);
+		Proc_err (INFO_OPT, "processing up to exp no - %i",i_limit-1);
+		
+		if( i_limit > 999 ) i_limit = 50;
+
+		while (i_expno < i_limit)
+		{
+			sprintf(status,"processing");
+			Proc_err ( INFO_OPT, "processing exp - %i",i_expno);
+			sprintf( data_File, "%s/%s/%d/pulseprogram", pdisk, specno, i_expno );
+			
+			if( access( data_File, R_OK ) == 0 )
+			{
+				Proc_err ( INFO_OPT, "about to do something");
+				STOREPAR("USERP3", plot_or_pdf); //store whether we're plotting or pdf-ing
+				XAU("janus-def-proc",cmd); //run default processing on data	
+			}
+		
+		i_expno++;
+		}
+
+		sprintf(status,"done processing %s",specno);	
+		//master_proc(specno,pdisk,puser,plot_or_pdf);
+	} else {
+		fclose(plist);
+		//can comment out below for debuging if finish=1 is commented out
+		//Proc_err(INFO_OPT,"plist is empty");
+	}
+	
+	//now we have to delete the first line of the proclist
+	//skip pointer to end of 1st line, then write the rest of file to temp
+	//open proclist again
+	plist=fopen(proclist,"r");
+	temp=fopen(temp_proclist,"w");
+	//only go on if first char is not an end of file
+	if ( (ch=fgetc(plist)) != EOF ) {
+		Proc_err(INFO_OPT,"file %s is not empty 2",proclist);
+		//should move file pointer past end of first line
+		while((ch=fgetc(plist))!='\n');
+		//now write all the rest of the data to temp file
+		Proc_err(INFO_OPT,"skipped first line of %s",proclist);
+		while((ch=fgetc(plist))!=EOF)
+			fputc(ch,temp);
+		fclose(plist);
+		fclose(temp);
+		plist=NULL;
+		temp=NULL;
+		Proc_err(INFO_OPT,"written rest of %s into %s",proclist,temp_proclist);
+		//ok, now reopen plist file and write temp file into it
+		plist=fopen(proclist,"w");
+		temp=fopen(temp_proclist,"r");
+		Proc_err(INFO_OPT,"going to copy %s into %s", temp_proclist,proclist);
+		while((ch=fgetc(temp))!=EOF)
+			fputc(ch,plist);
+		fclose(plist);
+		fclose(temp);
+		Proc_err(INFO_OPT,"copied %s into %s",temp_proclist,proclist);
+	} else
+	{	fclose(plist);
+		fclose(temp);
+		//comment out the below for troubleshooting; only if finish=1 is in.
+	//	Proc_err(INFO_OPT,"plist is empty");
+	}
+	//comment out to go on for ever...Well until something goes wrong.
+	//finish=1;
+	
+}
+Proc_err(INFO_OPT,"%s",specno);
+Proc_err(INFO_OPT,"%s",pdisk);
+Proc_err(INFO_OPT,"%s",puser);
+Proc_err(INFO_OPT,"%s",plot_or_pdf);
+sprintf(status,"done");
+Proc_err (INFO_OPT,lockfile);
+proclock = fopen(lockfile,"w+");
+fprintf(proclock,status);
+fclose(proclock);
+
+
+QUIT
+
+
+

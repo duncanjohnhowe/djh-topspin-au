@@ -1,0 +1,25 @@
+/*
+Program:	as_spoff2title
+Version:	1.0
+Author:		Sean Lynn
+Date:     26/1/2007
+Description:	include selective pulse offset in title
+*/
+char titlefile[80], irradtext[80];
+double o1p, sfo1, selppm;
+float spoffs2, sr;
+FILE *ftitle;
+
+//GETCURDATA
+FETCHPAR("SPOFFS 2", &spoffs2)
+FETCHPAR("SFO1", &sfo1)
+FETCHPAR("O1P", &o1p)
+FETCHPAR("SR", &sr)
+selppm = ((spoffs2 - sr) / sfo1) + o1p;
+sprintf( titlefile, "%s/data/chemist/nmr/%s/%d/pdata/1/title", disk, name, expno );
+ftitle = fopen( titlefile, "a+");
+sprintf ( irradtext, "1H irradiation at %.2f ppm", selppm);
+fputs( irradtext, ftitle);
+fclose( ftitle );
+
+QUIT

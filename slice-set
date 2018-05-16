@@ -1,0 +1,37 @@
+
+int num_slices = 20;
+int gradient = 50; //strength of gradient
+int slice_hz = 5000;
+int loop = 0;
+int temp_exp_num = 898;
+int dataset_exp = 899;
+float offset_hz = 150000;
+float offset_inc = 1;
+float tmpfloat = 0-offset_hz;
+char tmpstr[1024];
+/*insert user interaction here for gradient, number slices, offset and checking.*/
+
+GETCURDATA
+/*setup temp experiment to run the slices in*/
+DATASET(name,temp_exp_num,1,disk,user) 
+VIEWDATA_SAMEWIN
+RPAR("slice-select","all")
+SETCURDATA
+XAU("wvm", "-a") //run wavemaker to set pulses
+offset_inc = (offset_hz*2)/num_slices;
+offset_hz = tmpfloat; //starts with negative value, which is bottom of tube
+GETCURDATA
+
+TIMES(num_slices+1) //we want it to go through 0 really
+	loop++;
+	STOREPAR("SPOFFS 1",offset_hz)
+	//ZG
+	sprintf(tmpstr,"Loop = %i Spoffs1 = %f",loop,offset_hz);
+	Proc_err(INFO_OPT,"%s",tmpstr);
+	//WSER(loop,name,temp_exp_num,1,disk,user)
+	offset_hz = offset_hz+offset_inc;
+	
+END
+QUIT
+	
+

@@ -1,0 +1,71 @@
+/****************************************************************/
+/*	zgchkte 		20/1/2017			*/
+/* By Duncan Howe Univ Cambridge				*/
+/* Monitors temperature and kills Topspin if it deviates too	*/
+/* much from defined temperature				*/
+/****************************************************************/
+/*	Short Description :					*/
+/* Based on zgchkte by below                                    */
+/****************************************************************/
+/*	Author(s) :						*/
+/*	Name            : Henny Janssen				*/
+/*	Organisation    : Bruker Netherlands			*/
+/*	Email           : henny.janssen@bruker.nl		*/
+/****************************************************************/
+/*	Name		Date	Modification:			*/
+/*	hj		000412	created				*/
+/****************************************************************/
+/*
+$Id: zgchkte,v 1.1 2001/01/04 16:36:31 eng Exp $
+*/
+
+
+float deviation = 0.0;
+float max_deviation = 5.0;
+float def_temp = 298.0;
+float te, tes, diff;
+int interval = 30;
+int il = 0;
+
+char log_dir[PATH_MAX]="c:/topspin-logs/;
+char batfile[PATH_MAX],batcmd[127]="blow-topspin.bat";
+char cmdstr[PATH_MAX];
+FILE *fbat = NULL;
+
+strcpy(log_dir,batcmd);
+strcpy(batfile,log_dir);
+
+GETCURDATA
+
+
+while ( il==0)
+{
+
+    CPR_exec("teget",WAIT_TERM); //puts current temp into te
+    FETCHPARS("TE",&tes)
+    deviation=tes-def_temp;
+    if (deviation < 0.0)
+      deviation = (-deviation);
+    if (deviation > max_deviation)
+    {
+      Proc_err (ERR_OK,
+		"Temperature is %f instead of %f,\n"
+		"acquisition stopped",tes,deviation);
+      XCMD("halt");
+      fbat = fopen(batfile, "w");
+      if (fbat == NULL)
+	{
+	Proc_err(INFO_OPT, "can't open %s",batfile);
+	exit(1);
+	}
+      fputs(batcmd,fbat);
+      sprintf(batcmd,"\r\n"); //write a newline/return to bat file
+      
+      fclose(fbat);
+    }
+    sleep(interval);
+  
+
+}
+
+QUIT

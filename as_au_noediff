@@ -1,0 +1,154 @@
+
+#define USE_LIBACQ
+#define Avance 3
+#include <lib/util.h>
+
+int	first,nfreq,na,ns,second,num,texpno;
+float	o2[100],pl,sr;
+double	sfo2,bf2,swp;
+char	f2listname[15],cfile[PATH_MAX],path[PATH_MAX],string[80];
+FILE	*fin, *fptr;
+
+
+GETCURDATA
+FETCHPAR("SR", &sr)
+FETCHPAR("NS", &ns)
+if( ns<16 ) na =1;
+if(ns>15)
+{  
+	na = ns/16;	 /*NUMBER OF CYCLES*/
+}
+
+first=expno;
+
+/*set pointer fin to freqlist */
+
+STOREPAR("FQ1LIST", name)
+  (void) sprintf(path,"%s/lists/f1/%s",getstan(0,0), name);
+  fin=fopen(path,"r");
+  if (fin==NULL)
+     {	Proc_err(0,"Frequency list not found.\n\nProgram aborted.");
+	STOP
+     }
+  nfreq=0;
+  fscanf(fin,"%*s %lf",&bf2);
+  while ( fscanf(fin,"%f",&o2[nfreq]) != EOF )
+    nfreq++;
+  fclose(fin);
+
+  i1=nfreq;
+
+/*Set phasing*/
+
+STOREPAR("NS",1);
+/*sfo2=bf2+(double)o2[nfreq]/1e6;
+STOREPAR("SFO2",sfo2)
+Proc_err(0,"SFO2 %f",o2[nfreq]);*/
+ZG;
+APKS;
+STOREPAR("NS",16);
+
+/*set up data sets*/
+
+  Proc_err(0,"creating data sets");
+  USELASTPARS
+  TIMES(nfreq)
+#include <inc/make_zero_fid>		/* create zero FID file */
+        STOREPARS("NS",0)
+	sfo2=bf2+(double)o2[loopcount1]/1e6;
+	/*
+	Proc_err(DEF_ERR_OPT,"o2 = %f\nsfo2 = %f",o2[loopcount1],sfo2);
+	*/
+	STOREPAR("SFO2",sfo2)
+	IEXPNO				/* next expno */
+  END
+
+  (void) sprintf(cfile,"%s%s",PathSystemHome(),"/multicyc.acq");
+  if (!(fptr = fopen(cfile,"w")))
+      STOPMSG("Cannot create multicyc.acq control file");
+  fclose(fptr);
+
+/*cycle acquisition through datasets*/
+
+  USECURPARS				/* use individual dataset pars */
+  TIMES2(na)				/* time avarage cycle */
+	REXPNO(first)
+	TIMES(nfreq)			/* loop over all datsets */
+	    Proc_err(0,"noediff: acquisition in progress\n\n\
+	irradiation point # %d\n\
+	average cycle # %d out of %d",loopcount1+1,loopcount2+1, na);
+	if(loopcount2==0)
+	{
+		ZG
+	}
+	else
+	{
+	    	GO
+	}
+	IEXPNO
+   END
+        if (!(fptr = fopen(cfile,"r")))
+        {
+            (void) sprintf(text,"interrupted by user\nnoediff halted after %d cycles",loopcount2+1);
+            STOPMSG(text);
+        }
+        fclose(fptr);
+
+  END
+
+unlink(cfile);
+
+
+/* multiefp next*/
+
+GETCURDATA
+
+EF;
+APKS;
+
+
+WPAR("tmpmefp","proc")
+expno = first;
+TIMES(nfreq)
+  RPAR("tmpmefp","proc")
+  EFP
+  IEXPNO
+END
+DEXPNO
+
+/* delete remaining files	*/
+
+sprintf (string,"rm -r %s/par/tmpmefp", getstan(0,0));
+system (string);
+
+/* diffe next  */
+
+  GETCURDATA
+  /*first=expno;*/
+  /*second=expno+1;*/
+  second = first+1;
+  
+  num=nfreq-1;
+  texpno=(1+(int)((second+num)/10))*10+1;
+
+  DATASET(name,second,procno,disk,user)
+  FETCHPARS("SW_p",&swp)
+
+  for (i1=0;i1<num;i1++)
+  {	DATASET(name,second+i1,procno,disk,user)
+	USELASTPARS
+	DATASET(name,texpno+i1,procno,disk,user)
+	/*DATASET(name, second+i1, 2, disk, user)*/
+	USECURPARS
+	STOREPARS("SW_p",swp)
+	DATASET2(name,second+i1,procno,disk,user)
+	DATASET3(name,first,procno,disk,user)
+	STOREPAR("DC",-1.0)
+
+	ADD
+  }
+
+DATASET(name,texpno,procno,disk,user)
+/*DATASET(name, second, 2, disk, user)*/
+VIEWDATA
+QUITMSG("--- runnnoe finished ---")

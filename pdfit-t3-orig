@@ -1,0 +1,14 @@
+char pdfname[512]="";
+
+GETCURDATA;
+DATASET( name, expno, procno, disk, user);
+XCMD("dpl1");
+/*below line debuggered from TS 1 & 2... the disk variable now returns a different value!
+was sprintf( pdfname, "%s/data/%s/nmr/%s/%d/pdata/%d/%s.pdf", disk, user, name, expno, procno, name );*/
+sprintf( pdfname, "%s%s/%s/%d/pdata/%d/%s.pdf", disk, user, name, expno, procno, name );
+AUTOPLOT_TO_FILE(pdfname);
+
+sprintf( pdfname, "e:/pdf/%s.pdf", name );
+AUTOPLOT_TO_FILE(pdfname);
+
+QUIT

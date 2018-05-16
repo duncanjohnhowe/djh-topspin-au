@@ -1,0 +1,27 @@
+/****************************************************************/
+/*     tso
+     
+Topshim, then
+add number to z shim, default is 20 units
+*/
+
+#include <inc/bsms_program>    /* must be the first statement ****/
+
+#define DEFZINC 10
+
+int z, zinc;
+GETCURDATA
+
+XCMD("topshim ordmax=8 tuneaxyz")
+
+GETBSMSVAL(BSN_Z,z)
+if ( (zinc=atoi(cmd)) == 0) zinc=DEFZINC;
+z+=zinc;
+PUTBSMSVAL(BSN_Z, z)
+
+QUIT
+
+
+
+
+

@@ -1,0 +1,52 @@
+/*
+Program:	as_iproc13c
+Version:	1.0
+Author:		Sean Lynn
+Date:     11/1/2007
+Description:	process to get correct phase and reference parameters,
+              plot spectra,
+							create and archive pdf, 
+							delete processed data, copy raw data and correct proc parameters to archive, 
+							reprocess so complete data is available on instrument.
+*/
+
+char pdf_Name[PATH_MAX] = "";
+char szFileStatus[20] = "";
+char szTypeOfData[20] = "";
+char cmdstr[200] = "";
+char procnoPath[PATH_MAX] = "";
+
+GETCURDATA
+
+//process
+EF
+APKS
+XAU("set_sreglist")
+SREF 
+XAU("as_nohump")
+
+//plot to paper and pdf archive
+//AUTOPLOT
+GetPdfFilePath( pdf_Name, szFileStatus );
+AUTOPLOT_TO_FILE(pdf_Name)
+
+FETCHPAR("PULPROG", szTypeOfData)
+szTypeOfData[5]=NULL;
+UpdateWorkLog( szTypeOfData, pdf_Name, szFileStatus );
+
+//delete processed data
+sprintf( procnoPath, "%s/data/%s/nmr/%s/%d/pdata/%d", disk, user, name, expno, procno );
+i1 = unlinkpr( procnoPath );
+//set process program to not archive data
+STOREPAR("AUNMP", "as_proc13c")
+//archive spectra
+XAU("as_cp2archive")
+
+//regenerate processed data
+EFP
+XAU("as_nohump")
+
+QUIT
+
+#include "C:\Bruker\TOPSPIN\exp\stan\nmr\au\src\as_pdf_common.inc"
+#include <inc/sysutil>

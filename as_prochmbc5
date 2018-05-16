@@ -1,0 +1,14 @@
+/* ========================================================================== */
+/*
+title:	as_prochmbc
+author:	Sean Lynn modded by djh
+description:	autoprocesses hmbc 
+/*
+/* ========================================================================== */
+GETCURDATA
+XFB
+XAU("as_projref")
+STOREPAR("layout", "+/as_hmbcno13c.xwp")
+LEVCALC
+AUTOPLOT
+QUIT

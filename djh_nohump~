@@ -1,0 +1,21 @@
+double SW,O1P,left,right,step;
+float absf1, absf2;
+
+//Now get the left and right spectral limits
+FETCHPAR("O1P",&O1P);
+FETCHPAR("SW",&SW);
+left=(SW/2)+O1P;
+right=O1P-(SW/2);
+step=SW/23;
+
+//...and walk through the spectrum optimising the baseline in chunks
+absf1 = left+0.1;
+while (absf1 > right+1)
+{
+  absf2 = absf1-step;
+  STOREPAR("ABSF1", absf1)
+  STOREPAR("ABSF2", absf2)
+  ABSF
+  absf1=absf1-step;
+}
+QUIT

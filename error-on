@@ -1,0 +1,4 @@
+XCMD("setdef ackn ok")
+XCMD("setdef stderr on")
+XCMD("setdef stdout on")
+QUIT

@@ -1,0 +1,31 @@
+/*exports the ENTIRE DATASET, which includes processed data*/
+/*puts the jcamp file in a folder called jcamp above the working data directory*/
+/*this jcamp directory must exist before the program is called*/
+/*djh35@cam.ac.uk June 2016*/
+
+char data_path[PATH_MAX], exp_path[PATH_MAX], fid_path[PATH_MAX], ser_path[PATH_MAX];
+char exp_name[PATH_MAX], jdx_name[PATH_MAX], jdx_path[PATH_MAX];
+char nuc1[20], nuc2[20],au_p[128],cmd_str[256];
+int jdx_type=6;
+GETCURDATA;
+
+for (;;)
+{
+	(void)sprintf(text,"What percentage sparsity would you like? Type 0 (that's zero) for help.\n", jdx_type);
+	GETFLOAT(text, jdx_type);
+   
+	if ( jdx_type >= 0 && sjdx_type <= 6 )
+	break;
+}
+sprintf( jdx_name, "%s-jcamp.dx",name);
+sprintf( jdx_path, "%s/../jcamp/%s", disk,jdx_name);
+//Proc_err(DEF_ERR_OPT, "disk=%s,user=%s,i_expno=%i,expname=%s,jdx_name=%s,jdx_path=%s",disk,user,i_expno,exp_name,jdx_name,jdx_path);
+TOJDX(jdx_path,jdx_type,2,"*","*","*");
+ //Proc_err(DEF_ERR_OPT, "loop=%i,i_expno=%i",loop,i_expno);
+
+
+QUIT
+
+#include <stdio.h>
+#include <string.h>
+#include <inc/sysutil>

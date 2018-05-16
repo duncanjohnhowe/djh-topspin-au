@@ -1,0 +1,98 @@
+/* quantcal                                                                       */
+/* set integral quantitation 'spectrometer constant' using known sample           */
+/* To use: manually calibrate signals to mM proton concentration                  */
+/*         (e.g. for 10mM sample set a two proton integral to 20)                 */
+/*         then run quantcal - the calibration is stored in TSHOME/conf/quantcal  */
+/*         (scaled relative to ns 1, rg 1, and NC_proc of 1)                      */
+/*                                                                                */
+/*         Unknown samples can then be quantified using 'quantint'                */
+/*                                                                                */
+/* Note! Remember this setup is only valid for samples with the same spectrometer */
+/* setup and configuration (probe type, tuning, pulse calibration, etc) and this  */
+/* includes tube diameter - thin wall tubes will appear 'more concentrated' than  */
+/* normal tubes! (e.g. 0.1% Ethylbenzene = 8.17mM, so would integrate:            */
+/*   40.8 : 16.3 : 24.5   BUT standard s/n test sample is usually in thin wall    */
+/* tube, so would need to adjust up by factor of 10-15% relative to normal tubes  */
+/*                                                                                */
+/* andrew.gibbs@bruker.co.uk                                                      */
+/* 2007/10/25                                                                     */
+/* 2007/12/20  add more info (probe, instrum, pulprog)                            */
+/* 2008/08/06  check SI                                                           */
+
+float rg;
+int ns;
+float intscl;
+int nc_proc;
+int si;
+double cal;
+float te, p1;
+char probe[512];
+char instrum[512];
+char pulprog[100];
+
+char calpath[PATH_MAX];
+FILE *calfile; 
+#define CALNAME "quantcal"
+
+#undef tm
+#include <time.h>
+time_t now_s, dtime_s;		  	/* seconds since 1970 */
+struct tm *now;	  		/* structure with year, month etc. */
+
+
+GETCURDATA
+
+if (Proc_err(QUESTION_OPT, "Have you calibrated integrals to mM proton for sample?") != ERR_OK)
+{
+	ABORT
+}
+
+/* get status information */
+FETCHPARS("NS", &ns)
+FETCHPARS("RG", &rg)
+FETCHPARS("P 1", &p1)
+FETCHPARS("TE", &te)
+FETCHPARS("INTSCL", &intscl)
+if (intscl == 1) STOPMSG("integral calibration not saved - please calibrate, then save and return!")
+FETCHPARS("NC_proc", &nc_proc)
+FETCHPARS("DATE", &dtime_s) 
+FETCHPARS("PROBHD", probe)
+FETCHPARS("INSTRUM", instrum)
+FETCHPARS("PULPROG", pulprog)
+FETCHPARS("SI", &si)
+
+/* PROBHD seems to have a \n at the end?  Ditch last character as workaround */
+i1 = strlen(probe);
+if (i1 > 1) probe[i1-1] = '\0';
+
+/* get current time */
+now_s=time(NULL);
+
+/* adjust scale by known factors */
+cal = pow(2.0, (double)nc_proc)/(rg * ns * intscl * si);
+
+sprintf(calpath, "%s/instr/%s/%s", PathXWinNMRConf(), instrum, CALNAME);
+if ( (calfile=fopen(calpath, "w")) == NULL)
+{
+		Proc_err(INFO_OPT, "Could not write file %s\nPlease check permissions and try again!", calpath);
+		ABORT
+}
+fprintf(calfile, "%le (integral scale factor)\n%.1f us (pulse length)\n%.1f K (temperature)\n", cal, p1, te);
+now = localtime(&dtime_s);
+fprintf(calfile, "%d (data acquisition date = %d/%d/%d %02d:%02d:%02d)\n", dtime_s, now->tm_year+1900, 1+now->tm_mon, now->tm_mday, now->tm_hour, now->tm_min, now->tm_sec);
+now = localtime(&now_s);
+fprintf(calfile, "%d (quantcal date = %d/%d/%d %02d:%02d:%02d)\n", now_s, now->tm_year+1900, 1+now->tm_mon, now->tm_mday, now->tm_hour, now->tm_min, now->tm_sec);
+fprintf(calfile, "%s (instrument)\n", instrum);
+fprintf(calfile, "%s (probehead)\n", probe);
+fprintf(calfile, "%s %s %s %d %d (dataset)\n", disk, user, name, expno, procno);
+fprintf(calfile, "%s (pulprog)\n", pulprog);
+fclose(calfile);
+
+showfile(calpath);
+//Proc_err(INFO_OPT, "Calibration = %.2le (at P1 = %0.1f us and TE = %.1f K)\nStored to %s", cal, p1, te, calpath);
+
+
+QUIT
+
+
+

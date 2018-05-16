@@ -1,0 +1,212 @@
+/* refint
+
+create a referenced integral region (e.g. to calibrate
+a reference signal, real or eretic), defined as a 
+center point and width in ppm, and desired integral.
+
+The region can be entered on the command line, e.g
+
+	xau refint 2.5 0.3 100
+	xau refint 2.5 0.3    
+	xau refint 2.5
+	xau refint
+
+Missing parameters are given the default settings as defined below.
+
+NOTE: The display of the integrals in plot or (especially) xwinplot
+can show rounding errors (99.97 rather than 100.00) even though
+the integrals shown by 'li' are exactly as specified...
+
+andrew.gibbs@bruker.co.uk
+2002/10/28 created using XWIN3.1/win2k
+2004/07/27 test with TopSpin1.2/win2k
+2004/08/06 don't output small fragments next to reference (i.e. < AZFE)
+2006/12/14 change output to skirt topspin scaling issues
+*/
+
+/**** DEFAULT SETTINGS ****/
+/****  please change to suit!  ****/
+
+#define DEFAULTPPM -1.5
+#define DEFAULTWIDTH 0.4
+#define DEFAULTINT 100.0
+
+/**************************/
+
+
+#define INTRNGPATH "%s/data/%s/nmr/%s/%d/pdata/%d/intrng"
+#define INTFILELINE "%f %f 0 0\n"
+#define IMAX 10
+#define INTMAX 100
+#define MODEBEFORE 0
+#define MODEDURING 1
+#define MODEAFTER 2
+
+
+int numint;
+int i;
+char sregfile[PATH_MAX];
+struct region {
+	float lowf;
+	float highf;
+} intrngs[INTMAX];
+float a,b,A,B;
+char tempstr[255], tempstr2[255];
+char intrngpath[255];
+FILE *intfile, *file;
+float upper, lower;
+int searchmode;
+char curprin[255];
+float azfe;
+
+float referenceppm;
+float referencewidth;
+float referenceint;
+float intscl, inttotal;
+char cmdold[255];
+
+
+
+GETCURDATA
+
+FETCHPAR("AZFE", &azfe)
+
+/* check for command line options */
+i=0;
+if ( cmd[0] )
+{
+	i = sscanf(cmd, "%f %f %f", &referenceppm, &referencewidth, &referenceint);
+}
+
+if (i < 1) referenceppm = DEFAULTPPM;
+if (i < 2) referencewidth = DEFAULTWIDTH;
+if (i < 3) referenceint = DEFAULTINT;
+
+if (referenceint <=0.0 || referencewidth <= 0.0)
+{
+	Proc_err(INFO_OPT, "reference region not properly defined? (center = %.1f, width = %.1f, integral = %.1f)", referenceppm, referencewidth, referenceint);
+	ABORT
+}
+
+/***** turn INTBC to 'off' otherwise XWINPLOT integrals are curious! ****/
+// irrelevent for mode 'A' intrng format  STOREPAR("INTBC", 0)
+
+/* open intrng file */
+sprintf(intrngpath, INTRNGPATH, disk, user, name, expno, procno);
+if ( (intfile = fopen(intrngpath, "r+")) == NULL )
+{
+	/* no integrals, or perhaps no permission to alter file */
+	Proc_err(INFO_OPT, "No intrng file %s", intrngpath);
+        ABORT
+}
+
+/* read integrals */
+fgets(tempstr, 120, intfile);    
+i=0;
+while( (i < INTMAX) && fgets(tempstr2, 200, intfile))
+{ 
+	if (sscanf(tempstr2, "%f %f", &intrngs[i].lowf, &intrngs[i].highf) == 2)
+	{
+		i++;
+	}
+}
+numint=i;
+
+/* close file and reopen to overwrite */
+fclose(intfile);
+if ( (intfile = fopen(intrngpath, "w")) == NULL )
+{
+	Proc_err(INFO_OPT, "Cannot write to intrng file %s", intrngpath);
+        STOP
+}
+
+/* set desired scale (slope and bias discarded if it existed!) */
+fprintf(intfile, "A 0\n# integrals altered by refint!\n", referenceint);
+
+/* compare each integral region to reference region */
+A = referenceppm + referencewidth/2.0;
+B = referenceppm - referencewidth/2.0;
+searchmode = MODEBEFORE;
+for (i=0; i<numint; i++)
+{
+	a=intrngs[i].lowf;
+	b=intrngs[i].highf;
+
+	if (searchmode == MODEAFTER)
+	{
+		/* finished, all other integrals are unaffected */
+		fprintf(intfile, INTFILELINE, a, b, 0.0);
+	}
+	if (searchmode == MODEDURING && b<B)
+	{
+		fprintf(intfile, INTFILELINE, A, B, 1.0);
+		searchmode = MODEAFTER;
+		if ( a > B) fprintf(intfile, INTFILELINE, B, b, 0.0);
+		else fprintf(intfile, INTFILELINE, a, b, 0.0);
+	}
+	if (searchmode == MODEBEFORE)
+	{
+		if ( b>A )
+		{
+			/* not got to the reference region yet! */
+			fprintf(intfile, INTFILELINE, a, b, 0.0);
+		} else			
+		if ( a>A)
+		{
+			if (b<B)
+			{
+				/* integral spans reference - chop both ends */
+				if ( (a-A) > azfe ) fprintf(intfile, INTFILELINE, a, A, 0.0);
+				fprintf(intfile, INTFILELINE, A, B, 1.0);
+				if ( (B-b) > azfe ) fprintf(intfile, INTFILELINE, B, b, 0.0); 
+				searchmode = MODEAFTER;
+			} else
+			{
+				/* integral finishes within reference region */
+				if ( (a-A) > azfe ) fprintf(intfile, INTFILELINE, a, A, 0.0);
+				searchmode = MODEDURING;
+			}
+		} else
+		if ( b<B ) 
+		{
+			fprintf(intfile, INTFILELINE, A, B, 1.0);
+			searchmode = MODEAFTER;
+			if ( a>B )
+			{
+				/* integral starts within reference region */
+				if ( (B-b) > azfe ) fprintf(intfile, INTFILELINE, B, b, 0.0);
+			}
+			else
+			{	/* integral completely after region */
+				fprintf(intfile, INTFILELINE, a, b, 0.0);
+			}
+		} else
+		{ 
+			/* integral completely within reference region */
+			searchmode = MODEDURING;
+		}
+	}
+	
+}
+
+/* did we run out of integrals before outputing reference? */
+if (searchmode != MODEAFTER) fprintf(intfile, INTFILELINE, A, B, 1.0);
+
+fclose(intfile);
+
+/* calculate intscl */
+strcpy(cmdold, cmd);
+sprintf(cmd, "%f %f", A, B);
+XAU("intregion", cmd)
+inttotal = AUERR;  /* the value returned is scaled down by 1000 just in case of hitting 32 bit limit! */
+/* put the old cmd back (but not used again here!) */
+strcpy(cmd, cmdold);
+
+intscl = (float)referenceint/(1000.0*(float)inttotal);
+
+STOREPARS("INTSCL", intscl)
+
+/* update display */
+VIEWDATA_SAMEWIN
+QUIT
+		

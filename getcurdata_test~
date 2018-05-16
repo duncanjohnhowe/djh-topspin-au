@@ -1,0 +1,4 @@
+GETCURDATA
+Proc_err(INFO_OPT,"user is - %s",user);
+
+QUIT

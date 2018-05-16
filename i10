@@ -1,0 +1,35 @@
+/*** ^^A -*-C++-*- **********************************************/
+/*	iexpno			30.01.1992			*/
+/****************************************************************/
+/*	Short Description :					*/
+/*	Program to change to a new experiment number.		*/
+/****************************************************************/
+/*	Keywords :						*/
+/*	SREGLST							*/
+/****************************************************************/
+/*	Description/Usage :					*/
+/*	Program to change to a new experiment number. The	*/
+/*	target experiment number may be entered on the command	*/
+/*	line, the default is the next experiment number.	*/
+/****************************************************************/
+/*	Author(s) :						*/
+/*	Name		: Joost A. B. Lohman			*/
+/*	Organisation	: Bruker Spectrospin ltd		*/
+/*	Email		: j.lohman@bruker.co.uk			*/
+/****************************************************************/
+/*	Name		Date	Modification:			*/
+/*	jab		920130	created				*/
+/****************************************************************/
+/*
+$Id: iexpno,v 1.4 2003/10/16 13:51:25 wem Exp $
+*/
+
+GETCURDATA
+if ( (i1 = atoi(cmd)) == 0 )
+{
+  expno+=10;
+}
+else
+  expno = i1;
+VIEWDATA_SAMEWIN
+QUIT

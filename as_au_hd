@@ -1,0 +1,49 @@
+/* ========================================================================== */
+/*
+title:	au_hd
+author:	Sean Lynn
+description:	autoruns homo decoupling experiments
+              using freqlist called by spectrum name
+/*
+/* ========================================================================== */
+
+int	first_expno,nfreq;
+float	o2[100];
+double	sfo2,bf2;
+char	path[100];
+FILE	*fpFreqlist;
+
+GETCURDATA
+
+first_expno=expno;
+
+//read freqlist called name into o2 array, count points
+
+(void) sprintf(path,"%s/lists/f1/%s",getstan(0,0), name);
+fpFreqlist=fopen(path,"r");
+if( fpFreqlist==NULL )
+  {	
+  Proc_err(0,"Frequency list not found.\n\nProgram aborted.");
+	STOP
+  }
+nfreq=0;
+fscanf( fpFreqlist,"%*s %lf",&bf2 );
+while( fscanf(fpFreqlist,"%f",&o2[nfreq]) != EOF ) nfreq++;
+fclose( fpFreqlist );
+
+//make datasets and aquire data
+
+i1=0;
+USELASTPARS
+while( expno < (first_expno + nfreq) )
+ {
+ DATASET( name, expno, procno, disk, user )
+ sfo2=bf2+(double)o2[i1]/1e6;
+ STOREPAR("SFO2",sfo2)
+ RGA
+ ZG
+ expno++;
+ i1++;
+ }  
+
+QUIT

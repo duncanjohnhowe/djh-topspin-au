@@ -1,0 +1,105 @@
+/****************************************************************/
+/*	zgchkte 		12.04.2000			*/
+/****************************************************************/
+/*	Short Description :					*/
+/*	AU program starts acquisition with zg and monitors the	*/
+/*	temperature. The experiment is halted if the current	*/
+/*	temperature differs too much from the target		*/
+/*	temperature.						*/
+/****************************************************************/
+/*	Keywords :						*/
+/*	TE, edte, low temperature experiment			*/
+/****************************************************************/
+/*	Description/Usage :					*/
+/*	AU program starts acquisition with zg and monitors the	*/
+/*	temperature.						*/
+/*	As soon as the deviation is too large, the acquisition	*/
+/*	is terminated with "halt" and the spinner stops with	*/
+/*	"MASH". Configuration options in the program:		*/
+/*	INTERVAL	time between checks in seconds		*/
+/*	DIFF		max deviation of the temperature	*/
+/*	This AU program was developed primarily for low		*/
+/*	temperature measurements. If you want to run it at	*/
+/*	higher temperatures, you can change the line:		*/
+/*	if ( te > 280.0 )					*/
+/*	but you do this at your own risk!			*/
+/****************************************************************/
+/*	Author(s) :						*/
+/*	Name            : Henny Janssen				*/
+/*	Organisation    : Bruker Netherlands			*/
+/*	Email           : henny.janssen@bruker.nl		*/
+/****************************************************************/
+/*	Name		Date	Modification:			*/
+/*	hj		000412	created				*/
+/****************************************************************/
+/*
+$Id: zgchkte,v 1.1 2001/01/04 16:36:31 eng Exp $
+*/
+
+#define INTERVAL 10	/* Check interval (sec) */
+#define DIFF 5.0	/* Max temperature diff */
+
+float te, tes, diff;
+
+GETCURDATA
+
+/* Read the actual temperature */
+
+CPR_exec("teget",WAIT_TERM);
+FETCHPARS ("TE",&te);
+
+if ( te > 280.0 )
+{
+  Proc_err(DEF_ERR_OPT,"Target temperature too high: %.2f K.\n"
+	"AU program will stop. See AU\n"
+	"program header for more details.",te);
+  STOP
+}
+
+Proc_err(ERR_OK,
+"Temperature start of acquisition: %f, max deviation=%f",te,DIFF);
+
+/* Start acquisition, not with ZG, but in background */
+
+CPR_exec("zg",CONT_EX);
+
+/* Wait max 30 seconds until acquisition starts:  */
+
+i1=0;
+while ( !test_aip() && (i1 < 15))
+{
+  i1++;
+  sleep(2);
+}
+if (i1<15)
+{
+  /* Loop while acquisition runs */
+  while (test_aip())
+  {
+    CPR_exec("teget",WAIT_TERM);
+    FETCHPARS("TE",&tes)
+    diff=tes-te;
+    if (diff < 0.0)
+      diff= (-diff);
+    if (diff > DIFF)
+    {
+      Proc_err (ERR_OK,
+		"Temperature is %f instead of %f,\n"
+		"acquisition and rotation stopped",tes,te);
+      XCMD("halt");
+      MASH
+    }
+    sleep(INTERVAL);
+  }
+
+  /* Stop the spinner */
+
+  MASH
+}
+
+else
+{
+  Proc_err(DEF_ERR_OPT,"Unable to start the acquisition");
+}
+
+QUIT

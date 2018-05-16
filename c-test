@@ -1,0 +1,39 @@
+#include<stdio.h>
+
+int main()
+{
+    const int t=1000;
+    int chain=0,maxchain=0,test=1,l=1,maxno;
+    while (l<(t+1))
+    {
+        test=l;
+        chain=1;
+        while (test>1) 
+        {
+        	//if ( test % 2 == 0 )
+            if (test %2 !=0)
+        	{
+            	chain++;
+            	test=((3*test)+1);
+       		}
+            else
+            {
+                chain++;
+                test=test/2;
+        	}
+            if (chain>maxchain)
+        	{
+          		maxno=l;
+           		maxchain=chain;
+       		}
+        }
+     
+       
+    l++;   
+    }
+    sprintf ("\n\n Maxchain is - %i \n for %i",maxchain,maxno); 
+    Proc_err(INFO_OPT,"\n\n Maxchain is - %i \n for %i",maxchain,maxno);       
+    
+    return 0;
+    QUIT
+}

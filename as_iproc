@@ -1,0 +1,11 @@
+/*
+Program:	as_iconproc
+Version:	1.0
+Author:		Sean Lynn
+Date:     12/1/2007
+Description:	copy to archive only
+*/
+
+GETCURDATA
+XAU("as_cp2archive")
+QUIT

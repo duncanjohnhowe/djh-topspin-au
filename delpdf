@@ -1,0 +1,63 @@
+/*****************************************/
+/*The default way this is supposed to work is to send an email under automation, at a defined point in the experiment run
+/*MOD TO DELETE A PDF*/
+
+
+#include <stdio.h>
+#include <inc/sysutil>
+#include <dos.h>
+
+
+
+/*the directory to output pdfs to.*/
+char pdfdir[127]="e:/pdf/",pdfname[511]="e:/pdf/";
+char samplename[255], directory[255],snamepath[255]="e:",data_File[127];
+char orig_au[255],proc_au[255];
+char id[127]="camnmrservice@gmail.com", password[127]="pgamdjh2012";
+char email[255],title[255],message[255],body[255]="DO NOT REPLY";
+char archroot[255] = "e:\\zips"; 
+char emailedlist[1023] = "e:/emailed-list/emailed-list.txt";
+char batfile[127]="e:\\top-copy.bat",batcmd[127]="e:/top-copy.bat";
+char subdir[255], archpath[511], cmd_str[1023]="\n";
+char status1[127]="emailing",status2[127]="done"; 
+char status_string[1024]="working";
+int cmdstatus,orig_expno,i_limit,i_exp=1,pdfthere=0;
+FILE *fbat = NULL;
+FILE *sname = NULL;
+FILE *statusprint = NULL;
+
+
+XCMD("setdef ackn no")
+XCMD("setdef stderr off")
+XCMD("setdef stdout off")
+
+/*first thing to do is process the data in the directory we're in*/
+GETCURDATA
+
+
+//sprintf( pdfname, "e:\\data\\nmrservice\\\\nmr\\%s\\%d\\pdata\\%d\\%s.pdf", name, expno, procno,name );
+sprintf( pdfname, "e:\\data\\nmrservice\\\\nmr\\%s\\%d\\pdata\\%d\\*.pdf", name, expno, procno,name );
+
+/*****************************************************/
+/*SET BELOW TO CORRECT DATA DIR*/
+/**************************************************/
+
+	
+/*Now delete the pdf if there is one.*/
+
+
+sprintf (cmd_str, "del %s", pdfname);
+//Proc_err(INFO_OPT,"%s",cmd_str);
+
+/*write a dos batch file with the cmd_str and run it*/
+fbat = fopen(batfile, "w");
+fputs( cmd_str, fbat);
+fclose( fbat);
+//Show_status(cmd_str);
+system(batcmd);
+
+XCMD("setdef ackn no")
+XCMD("setdef stderr off")
+XCMD("setdef stdout off")
+
+QUIT

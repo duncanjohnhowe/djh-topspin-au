@@ -1,0 +1,449 @@
+/*** ^^A -*-C++-*- **********************************************/
+/*  dosy            19.12.2007                                  */
+/****************************************************************/
+/*  Short Description :                                         */
+/*  AU program to setup diffusion/DOSY experiments              */
+/****************************************************************/
+/*  Keywords :                                                  */
+/*  diffusion, DOSY                                             */
+/****************************************************************/
+/*  Description/Usage :                                         */
+/*  This AU program creates a JCAMP gradient ramp file          */
+/*  called "Difframp", which is stored in "..../lists/gp".      */
+/*  The arguments are the start value for the ramp, the         */
+/*  final value, the number of steps, whether a linear (l),     */
+/*  "squared" (q) or exponential (e) ramp, and whether an       */
+/*  acquisition should be started. All parameters may be passed */
+/*  on the command line.                                        */
+/*  example:    xau dosy 2 98 16 l y y                          */
+/*  This will create a ramp starting with 2% amplitude,         */
+/*  ending with 98% in 16 linearly spaced steps and will        */
+/*  directly start the acquisition. When passing the parameters */
+/*  on the command line and the fifth parameter indicates the   */
+/*  acquisition should be started directly, a sixth parameter   */
+/*  is evaluated, which allows to specify whether an 'rga'      */
+/*  should be executed prior to acquisition.                    */
+/*  In addition a file called "difflist" is created in the      */
+/*  expno directory, which contains the gradient amplitudes     */
+/*  scaled to rectangular gradients in G/cm as a kind of        */
+/*  status parameter. This file is needed for the               */
+/*  processing. It uses the information in the file             */
+/*  XWINNMRHOME/conf/instr/gradient_calib to calculate          */
+/*  the correct gradient strength. The gradient strength        */
+/*  scaling factor can be set using 'setpre'.                   */
+/*  Some parameters are checked for consistency.                */
+/*  In the case of the so called "squared" ramp, the            */
+/*  gradient amplitudes follow a square root function           */
+/*  leading to a linear response of the signal amplitudes.      */
+/*  A new gradient shape "Difftrap" (a trapezoidal shape) is    */
+/*  now supported. This is a nearly rectangular shape with      */
+/*  rise and fall times of 50 us. This is automatically         */
+/*  calculated if GPNAM6 is Difftrap.                           */
+/****************************************************************/
+/*  Author(s) :                                                 */
+/*  Name            : Rainer Kerssebaum                         */
+/*  Organisation    : Bruker BioSpin GmbH                       */
+/*  Email           : Rainer.Kerssebaum@bruker-biospin.de       */
+/****************************************************************/
+/*  Name    Date    Modification:                               */
+/*  rke     970725  created as dosyramp                         */
+/*  rke     971022  dummy scan handling added                   */
+/*  rke     971103  vdlist written                              */
+/*  rke     980127  renamed to dosy                             */
+/*  rke             vdlist with proper values                   */
+/*  rke     980515  ramp file renamed to dramp                  */
+/*  rke     000704  updated to work with XWin 3.0               */
+/*                  and gp syntax, creates difflist             */
+/*  rke     010904  gets shapescale value from gradient shape   */
+/*                  file                                        */
+/*  rke     010906  rga possible in automation                  */
+/*  rke     030708  description of ramp type saved to "EXP"     */
+/*  rke     030822  recalculate Difftrap if shape is Difftrap   */
+/*  rke     050127  exponential ramp added                      */
+/*  wem     050428  Show_meta(SM_PROC)                          */
+/*  wem     051229  PathXWinNMRExpStan() instead of getstan()   */
+/*  wem     071219  new handling of restore arg.                */
+/*  rke     111221  'rga' and 'zg' send to spooler              */
+/*                  reverse DifframpR created                   */
+/****************************************************************/
+/*
+$Id: dosy,v 1.17.6.2 2012/01/31 13:18:41 wem Exp $
+*/
+
+AUERR = dosy(curdat);
+QUIT
+
+/*  Define some constants and variables         */
+#define MAX_POINTS  4096
+#define TLL	    1024
+const   int debugflag=0;
+
+static int getshapescale(const char*, double*);
+static int scale_gradshape(const char*, double);
+static int trev_gradshape(const char*);
+
+
+int dosy(const char* curdat)
+{
+int     i, npoints=0, restore=0, fnmod1, fnmod2=0, pmod;
+float   gstart, gstop;
+double  value[MAX_POINTS], shapescale=0.63662, gcalib=53.5;
+char    inputline[TLL], text[TLL], path[PATH_MAX];
+char    rampname[TLL], shapename[TLL], stcmd[TLL], unit[TLL];
+const   char* ramptype = "l";
+const   char* answer = "n";
+const   char* rga = "n";
+FILE    *fptr;
+
+
+FETCHPAR("PARMODE",&pmod)
+if ( (pmod < 1) || (pmod > 2) )
+    STOPMSG("Not a 2D or 3D dataset");
+
+if (pmod == 1)      /* 2D */
+    {
+    FETCHPAR1("FnMODE",&fnmod1)
+    if (fnmod1 != 1)
+        STOPMSG("FnMODE must be QF in diffusion dimension (F1)")
+    FETCHPAR1("TD",&npoints)
+    }
+
+if (pmod == 2)      /* 3D */
+    {
+    FETCHPAR1("FnMODE",&fnmod2);        /* F2 */
+    FETCHPAR3("FnMODE",&fnmod1);        /* F1 */
+    if ( (fnmod1 != 1) && (fnmod2 != 1) )
+        STOPMSG("FnMODE must be QF in diffusion dimension")
+
+    if (fnmod2 == 1)    { FETCHPAR1("TD",&npoints) }
+    else                { FETCHPAR3("TD",&npoints) }
+    }
+
+
+/*  get shapescale value    */
+FETCHPAR("GPNAM 6",shapename)
+
+if (strcmp(shapename,"Difftrap") == 0)
+    {
+    XAU("difftrap", "")
+    ERRORABORT
+    }
+
+if (getshapescale(shapename, &shapescale) < 0)  return -1;
+
+
+/*  evaluate command line or ask for parameters     */
+if (i_argc > 2  &&  strcmp(i_argv[2], "restore") == 0)
+    restore = 1;
+
+if (i_argc <= 5  &&  restore == 0)
+    {
+    gstart=2;
+    gstop=98;
+    Proc_err(DEF_ERR_OPT,"Define the gradient ramp for shape\n%s (Integral = %.3f)",
+         shapename, shapescale);
+    GETFLOAT("Enter first gradient amplitude:  ", gstart )
+    GETFLOAT("Enter final gradient amplitude:  ", gstop )
+    GETINT("Enter number of points:  ", npoints )
+    strcpy(rampname, ramptype);
+    GETSTRING("ramp type (l q e {linear/squared/exponential} ):  ", rampname )
+    ramptype = rampname;
+    answer = "q";
+    }
+else
+    {
+    if (restore)
+        {
+        FETCHPAR("CNST 20",&gstart)
+        FETCHPAR("CNST 21",&gstop)
+        if (gstop < 0)
+            {
+            gstop = -gstop;
+            if (gstart < 0)
+                {
+                gstart = -gstart;
+                ramptype = "e";
+                }
+            else
+                {
+                ramptype = "q";
+                }
+            }
+        else
+            {
+            ramptype = "l";
+            }
+
+        Proc_err(DEF_ERR_OPT,
+            "Gradient ramp (%s) from %.1f to %.1f in %d steps restored",
+            ramptype,gstart,gstop,npoints);
+        }
+    else
+        {
+        gstart = atof(i_argv[2]);
+        gstop  = atof(i_argv[3]);
+        npoints = atoi(i_argv[4]);
+        ramptype = i_argv[5];
+
+        if (i_argc > 6)
+            answer = i_argv[6];
+        if (i_argc > 7)
+            rga = i_argv[7];
+        }
+    }
+
+
+/*  Check for legal number of points    */
+if ((gstart > gstop) ||
+    (gstop > 100) ||
+    (npoints <= 0) ||
+    (npoints > MAX_POINTS))
+    STOPMSG("illegal arguments")
+
+
+/*  calculate ramp and store shape using shapetool  */
+switch(ramptype[0])
+    {
+    case 'l' :  {
+                sprintf(stcmd,"st generate Ramp %d false %.1f %.1f filename=Difframp", npoints, gstart, gstop);
+                XCMD(stcmd)
+                ERRORABORT
+                sprintf(stcmd,"st generate Ramp %d false %.1f %.1f filename=DifframpR", npoints, gstop, gstart);
+                XCMD(stcmd)
+                ERRORABORT
+
+                STOREPAR("CNST 20", gstart)
+                STOREPAR("CNST 21", gstop)
+                sprintf(text,"lin G (%d points)",npoints);
+                STOREPAR("EXP",text)
+                }
+                break;
+
+    case 'q' :  {
+                sprintf(stcmd,"st generate QRamp %d false %.1f %.1f filename=Difframp", npoints, gstart, gstop);
+                XCMD(stcmd)
+                ERRORABORT
+                sprintf(stcmd,"st generate QRamp %d false %.1f %.1f filename=DifframpR", npoints, gstop, gstart);
+                XCMD(stcmd)
+                ERRORABORT
+
+                STOREPAR("CNST 20", gstart)
+                STOREPAR("CNST 21", -gstop)
+                sprintf(text,"lin Q (square, %d points)",npoints);
+                STOREPAR("EXP",text)
+                }
+                break;
+
+    case 'e' :  {
+                sprintf(stcmd,"st generate Efunc %d false %f filename=Difframp", npoints, gstart*100.0/gstop);
+                XCMD(stcmd)
+                ERRORABORT
+                if (scale_gradshape("Difframp", gstop) < 0)   return -1;
+                if (trev_gradshape("Difframp") < 0)   return -1;
+
+                sprintf(stcmd,"st generate Efunc %d false %f filename=DifframpR", npoints, gstart*100.0/gstop);
+                XCMD(stcmd)
+                ERRORABORT
+                if (scale_gradshape("DifframpR", gstop) < 0)   return -1;
+
+                STOREPAR("CNST 20", -gstart)
+                STOREPAR("CNST 21", -gstop)
+                sprintf(text,"exp G (%d points)",npoints);
+                STOREPAR("EXP",text)
+                }
+                break;
+
+    default  :  STOPMSG("illegal ramp type")
+    }
+
+
+/*  read gradient ramp values (just created by stcmd) for conversion to gradient strength    */
+if (getParfileDirForRead("Difframp", GP_DIRS, path) < 0)
+{
+    Proc_err(DEF_ERR_OPT, "%s: %s", "Difframp", path);
+    return -1;
+}
+
+if ((fptr = fopen(path,"r")) == 0 )
+    {
+    Proc_err(DEF_ERR_OPT,"cannot open ramp file for reading\n%s", path);
+    }
+else
+    {
+    i = 0;
+    while (fgets(inputline,sizeof(inputline),fptr) != 0)
+        {
+        if (strncmp("##", inputline, 2) != 0)
+            {
+            sscanf(inputline, "%lf", &value[i]);
+            i++;
+            }
+        }
+    fclose(fptr);
+    }
+
+
+/*  get gradient calibration    */
+sprintf(path, "%s/conf/instr/gradient_calib", PathXWinNMRInst());
+if ((fptr = fopen(path, "r")) != 0 )
+    {
+    if (fscanf(fptr, "%lf %s", &gcalib, unit) == 2)
+        {
+        if (strcmp(unit,"G/cm") != 0)
+            {
+            if (strcmp(unit,"G/mm") == 0)
+                gcalib*=10;
+            else
+                gcalib=53.5;
+            }
+        if (answer[0] != 'y' && gcalib <= 10.0)
+            {
+            Proc_err(ERRORH_OPT, "gradient calibration may be wrong\n%.4f G/cm", gcalib);
+            }
+        }
+    else
+        {
+        gcalib=53.5;
+        }
+    fclose( fptr );
+    }
+
+
+/*  open difflist file    */
+if ((fptr = fopen(ACQUPATH("difflist"), "wt")) == 0)
+    STOPMSG("Cannot create difflist")
+
+
+/*  store difflist with gradient strength values        */
+TIMES(npoints)
+    fprintf(fptr, "%.3f\n", value[loopcount1] * shapescale * gcalib);
+END
+
+fclose(fptr);
+
+STOREPAR("GPZ 6",100.0)
+
+
+if (pmod == 1)  { STOREPAR1("TD",npoints) }
+if (pmod == 2)
+    {
+    if (fnmod2 == 1) { STOREPAR1("TD",npoints) }
+    else             { STOREPAR3("TD",npoints) }
+    }
+
+Show_meta(SM_RAWP);
+
+if (i_argc <= 2)
+    {
+    Proc_err(DEF_ERR_OPT, "Gradient ramp from %.1f to %.1f written", gstart, gstop);
+    }
+
+if (answer[0] == 'n') STOP
+
+if (answer[0] != 'y')
+    {
+    if (Proc_err(ERROPT_AK_CAN, "Do you want to start acquisition ?") != 0)
+        STOP
+    }
+
+AUTOPHASE
+
+if (rga[0] == 'y')
+    RGA
+
+ZG
+return 0;
+}
+
+
+/* subroutines ****************************************************************/
+static int getshapescale(const char* shapename, double* scal)
+{
+char    inputline[TLL], path[PATH_MAX];
+FILE    *fptr;
+
+if (getParfileDirForRead(shapename, GP_DIRS, path) < 0)
+    {
+    Proc_err(DEF_ERR_OPT, "%s: %s", shapename, path);
+    return -1;
+    }
+
+if ((fptr = fopen(path, "r")) == 0)
+    {
+    Proc_err(DEF_ERR_OPT, "Cannot open shape file for reading\n%s", path);
+    return -1;
+    }
+
+while (fgets(inputline, sizeof(inputline), fptr) != 0)
+    {
+    if (strncmp("##$SHAPE_INTEGFAC=", inputline, 18) == 0)
+        {
+        sscanf(inputline, "%*s%lf", scal);
+        }
+    }
+
+if (debugflag > 0) {
+    Proc_err(ERROPT_AK_OK,"DEBUG\nshapename = %s\nshape integfactor = %.2f", shapename, *scal); }
+
+return 0;
+} /* end subroutine */
+
+
+#include <ShapeIO/ShapeIOC.h>
+
+static int scale_gradshape(const char* gradname, double fact)
+{
+const   double *inputData;
+const   double *phaseData = 0;
+int     size, mode;
+char    fname[PATH_MAX],text[TLL];
+
+if (getParfileDirForRead(gradname, GP_DIRS, fname) < 0)
+    {
+    Proc_err(DEF_ERR_OPT, "%s: %s", gradname, fname);
+    return -1;
+    }
+
+sprintf(text, "%f, false", fact);
+
+inputData = manipulateShapeC(fname, "scale", text, 0, &phaseData, &size, &mode);
+if (inputData)
+    {
+    if (writeShapeC(fname, inputData, size, 0, 0, 0) == 0)
+        {
+        Proc_err(DEF_ERR_OPT, "write gradient ramp file failed:\n%s", fname);
+        ABORT
+        }
+    }
+
+return 0;
+} /* end subroutine */
+
+
+static int trev_gradshape(const char* gradname)
+{
+const   double *inputData;
+const   double *phaseData = 0;
+int     size, mode;
+char    fname[PATH_MAX],text[TLL];
+
+if (getParfileDirForRead(gradname, GP_DIRS, fname) < 0)
+    {
+    Proc_err(DEF_ERR_OPT, "%s: %s", gradname, fname);
+    return -1;
+    }
+
+sprintf(text, "1.0, false");
+
+inputData = manipulateShapeC(fname, "trev", text, 0, &phaseData, &size, &mode);
+if (inputData)
+    {
+    if (writeShapeC(fname, inputData, size, 0, 0, 0) == 0)
+        {
+        Proc_err(DEF_ERR_OPT, "write gradient ramp file failed:\n%s", fname);
+        ABORT
+        }
+    }
+
+return 0;
+} /* end subroutine */

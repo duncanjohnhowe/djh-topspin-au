@@ -1,0 +1,31 @@
+/******* -*-C++-*- **********************************************/
+/*  au_dosy         19.08.2003                                  */
+/****************************************************************/
+/*  Short Description :                                         */
+/*  AU program for acquisition of DOSY data in automation.      */
+/****************************************************************/
+/*  Keywords :                                                  */
+/*  DOSY, automation, acquisition                               */
+/****************************************************************/
+/*  Description/Usage :                                         */
+/*  AU program for acquisition of DOSY data in automation.      */
+/*  rga is executed, then acquisition is started.               */
+/****************************************************************/
+/*  Author(s) :                                                 */
+/*  Name            : Rainer Kerssebaum                         */
+/*  Organisation    : Bruker BioSpin GmbH                       */
+/*  Email           : rainer.kerssebaum@bruker-biospin.de       */
+/****************************************************************/
+/*  Name    Date    Modification:                               */
+/*  rke     030819  created                                     */
+/****************************************************************/
+/*
+$Id: au_dosy,v 1.1 2011/03/25 15:16:13 wem Exp $
+*/
+
+int     td1;
+
+FETCHPAR1("TD", &td1)
+sprintf(text, "dosy_nosendgui 5 95 %d l y n", td1);
+XCMD(text)
+QUIT

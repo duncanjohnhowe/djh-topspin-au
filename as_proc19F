@@ -1,0 +1,36 @@
+char pdf_Name[PATH_MAX] = "";
+char szFileStatus[20] = "";
+char szTypeOfData[20] = "";
+char cmdstr[200] = "";
+float absf1, absf2;
+
+GETCURDATA
+STOREPAR("Me_mod", 3)
+EF
+PK
+APKS
+STOREPAR("Me_mod", 0)
+EFP
+
+absf1 = 25.0;
+while (absf1 > -275.0)
+{
+absf2 = absf1-10;
+STOREPAR("ABSF1", absf1)
+STOREPAR("ABSF2", absf2)
+ABSF
+absf1=absf1-10;
+}
+STOREPAR("MI",2.5)
+PP
+//AUTOPLOT
+GetPdfFilePath( pdf_Name, szFileStatus );
+AUTOPLOT_TO_FILE(pdf_Name)
+
+FETCHPAR("PULPROG", szTypeOfData)
+szTypeOfData[5]=NULL;
+UpdateWorkLog( szTypeOfData, pdf_Name, szFileStatus );
+
+QUIT
+
+#include "C:\Bruker\TOPSPIN\exp\stan\nmr\au\src\as_pdf_common.inc"

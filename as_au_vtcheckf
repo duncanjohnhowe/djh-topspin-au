@@ -1,0 +1,171 @@
+/*
+au_vtcheck
+Au-acquisition program for 1D spectra  
+with temperature set for aquisition, and return to ambient
+Desired temperature is compared to solvent and lowered if 
+too high, or raised if too low (only relevent for low T work!)
+
+Adjust NOVT, MINVT, MAXVT and SolvData to suit!
+*/
+
+/*
+Usage:                      
+The temperature is set from the parameter TE
+After the experiment is finished the final temperature is 
+written back to the parameters and to the plot title
+
+andrew.gibbs@bruker.co.uk
+980811
+010411 turn on heater if required, return to previous status!
+010821 check field and abort if long way off (wrong solvent!)
+020225 use modified version of vtu_heater from Guenther Schmidt
+*/
+
+
+/* temperature to set for unknown solvents, i.e. the standard  */
+/* operating temperature of the VT for a 'non VT' sample  */
+
+#define NOVT 30.0
+
+/* minimum operating temperature - adjust if you have a chiller etc. */
+/* this should be high enough to allow the VT to regulate! */
+
+#define MINVT 20.0
+
+/* maximum operating temperature (probe limit) */
+
+#define MAXVT 80.0
+
+/* other definitions */
+#define CtoK 273.16
+#define USE_SXUTIL
+#define USE_LIBACQ
+#define USE_LIBRRS
+
+float te, temp, curtemp;
+char solvent[20];
+char message[200];
+char command[500];
+char titlefile[80], temptext[80];
+FILE *title;
+struct SolvData {
+	char name[15];
+	float hight;
+	float lowt;
+};
+int i,j;
+int origheater;
+FILE *ftitle;
+
+/* solvent list - edit to suit!
+   name is as used in the 'edsolv' table
+   first number is the temperature (C) for maximum high temperature
+   (default here is 10 degrees less than bp.) and second is minimum
+   temperature (here 5 degree above mp.)
+
+   Always finish the list with "\0"!
+*/
+struct SolvData solvdata[30] = 
+{        
+         "Acetic",	118.0,	 23.0,	\
+				 "Aceton",	 47.0,	-89.0,	\
+				 "Acetone",	 47.0,	-89.0,	\
+				 "CD3CN",	 62.0,	-40.0,	\
+				 "C6D6",	 70.0,	 10.0,	\
+				 "CDCl3",	 52.0,	-59.0,	\
+				 "D2O",		 80.4,	  8.8,	\
+				 "DMF",		143.0,	-56.0,	\
+				 "DMSO",	179.0,	 23.0,	\
+				 "Dioxan",	 91.0,	 17.0,	\
+				 "Dioxane",	 91.0,	 17.0,	\
+				 "EtOH",	 69.0, -130.0,	\
+				 "EtOD",	 69.0, -130.0,	\
+				 "H2O",		 90.0,	  5.0,	\
+				 "H2O+D2O",	 90.0,	  5.0,	\
+				 "MeOH",	 55.0,	-93.0,	\
+				 "MeOD",	 55.0,	-93.0,	\
+				 "CD2Cl2",	 30.0,	-90.0,	\
+				 "Pyr",		106.0,	-37.0,	\
+				 "THF",    	 56.0, -104.0,	\
+				 "Tol",    	101.0,	-91.0,	\
+				 "TFA",    	62.0,	-10.0,	\
+				 "ACND2O", 	72.0,	  5.0,	\
+				 "CH3CN+D2O", 	72.0,	  5.0,	\
+				 "\0",0.0,0.0 } ;
+
+
+/* Start of AU program */
+GETCURDATA
+
+XAU("checkfield")
+if (AUERR==-2)  /* -2 == field out of range */
+{
+	ABORT
+}
+//XAU("vtu_heater2 check")
+//origheater = AUERR;  /* 0 = off, 1=on, -1=error! */
+//if (origheater <0 ) ABORT
+
+FETCHPAR("TE", &te)
+te = te - CtoK;
+FETCHPAR("SOLVENT", solvent)
+
+/* start with default temperature */
+temp=NOVT;
+
+/* check against valid solvents */
+i=0;
+do
+{
+	if ( !strcmp(solvent, solvdata[i].name) )
+	{
+		/* matched solvent, TE becomes valid */
+		temp = te;
+		if (solvdata[i].hight < temp) temp = solvdata[i].hight;
+		if (solvdata[i].lowt > temp)  temp = solvdata[i].lowt;
+	}
+}
+while( solvdata[++i].name[0] != '\0' );
+
+/* and finally against system limits */
+if (temp < MINVT) temp = MINVT;
+if (temp > MAXVT) temp = MAXVT;
+
+STOREPAR("TE", temp + CtoK)
+TESET
+
+TEREADY(10,0.2)
+
+//RSH("high.vt")
+
+//TUNE("z1z2")
+XAU("gradshimau")
+XAU("as_juptxt")
+
+RGA
+ZG
+
+
+//get the actual final temperature and put to status params
+
+XCMD("teget")
+
+// add the temperature to the plot title 
+
+sprintf( titlefile, "%s/data/chemist/nmr/%s/%d/pdata/1/title", disk, name, expno );
+ftitle = fopen( titlefile, "a+");
+sprintf ( temptext, "temp = %3.0fC\n", temp);
+fputs( temptext, ftitle);
+fclose( ftitle );
+
+//set and check for temperature to go down to RT
+
+STOREPAR("TE", NOVT + CtoK)
+Proc_err(INFO_OPT, "TE = %f", NOVT + CtoK);
+TESET
+TEREADY(5,1.0)
+
+
+STOREPAR("TE", te + CtoK) // put desired temperature back to params 
+
+QUIT

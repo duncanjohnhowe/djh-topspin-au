@@ -1,0 +1,36 @@
+
+int new_exp;
+char titlefile[512], titletext[512], titletextnew[512]; 
+char pdfname[512]="d:/disk2/data/service/pdf/";
+float absf1,absf2;
+FILE *ftitle = NULL;
+
+GETCURDATA
+VIEWDATA_SAMEWIN
+EFP
+APKS
+STOREPAR("F1P", 250.0);
+STOREPAR("F2P", -200.0);
+STOREPAR("MI", 0.5);
+STOREPAR("PC", 1.2);
+STOREPAR("CY",19.0);
+STOREPAR("MAXI", 2000.0);
+STOREPAR("PSCAL", 0);
+XCMD("31pref");
+PP
+
+ABS
+APK
+ABS
+APKS
+
+sprintf( pdfname, "%s/data/%s/nmr/%s/%d/pdata/%d/%s.pdf", disk, user, name, expno, procno, name );
+AUTOPLOT_TO_FILE(pdfname);
+
+sprintf( pdfname, "d:/disk2/data/service/pdf/%s-31p.pdf", name );
+AUTOPLOT_TO_FILE(pdfname);
+XMAC("pb")
+sprintf( pdfname, "d:/disk2/data/service/pdf/%s-bsl-cor-31p.pdf", name );
+AUTOPLOT_TO_FILE(pdfname);
+
+QUIT

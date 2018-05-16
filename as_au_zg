@@ -1,0 +1,8 @@
+/*au_zgonly with update jup.txt*/
+/*Sean Lynn 11/1/2007 */
+
+GETCURDATA
+XAU("as_juptxt")
+RGA
+ZG
+QUIT

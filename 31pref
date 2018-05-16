@@ -1,0 +1,59 @@
+char solvent[32];
+
+GETCURDATA
+FETCHPAR("SOLVENT",solvent);
+
+if (strcmp(solvent,"CDCl3")==0) 
+	{
+	STOREPAR("SR", -104.71);
+	}
+if (strcmp(solvent,"D2O")==0) 
+	{
+	STOREPAR("SR", -119.44);
+	}	
+if (strcmp(solvent,"Acetone")==0) 
+	{
+	STOREPAR("SR", -268.16);
+	}
+if (strcmp(solvent,"acetone-cap")==0) 
+	{
+	STOREPAR("SR", -268.16);
+	}
+if (strcmp(solvent,"THF")==0) 
+	{
+	STOREPAR("SR", -155.46);
+	}
+if (strcmp(solvent,"C6D6")==0) 
+	{
+	STOREPAR("SR", -104.50);
+	} 
+if (strcmp(solvent,"MeOD")==0) 
+	{
+	STOREPAR("SR", -222.40);
+	}
+if (strcmp(solvent,"CD3CN")==0) 
+	{
+	STOREPAR("SR", -238.9);
+	}
+if (strcmp(solvent,"CD2Cl2")==0) 
+	{
+	STOREPAR("SR", -97.72);
+	}
+if (strcmp(solvent,"Tol")==0) 
+	{
+	STOREPAR("SR", -102.03);
+	}
+if (strcmp(solvent,"Acetic")==0) 
+	{
+	STOREPAR("SR", -199.71);
+	}
+if (strcmp(solvent,"DMSO")==0) 
+	{
+	STOREPAR("SR", 39.60);
+	}
+if (strcmp(solvent,"DMF")==0) 
+	{
+	STOREPAR("SR", -185.70);
+	}
+	
+QUIT

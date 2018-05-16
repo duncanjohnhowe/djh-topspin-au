@@ -1,0 +1,137 @@
+
+int num_slices = 100;
+int gradient = 50; //strength of gradient
+int slice_hz = 5000; //This is the thickness of the slice; will be related to nuclei/gradient power.(MHz?)
+int slice_hz_lower_limit = 5000;
+int slice_hz_upper_limit = 10000;
+
+int loop = 0;
+int temp_exp_num = 999; //This is where the 1D aquisitions go
+int result_exp = 899; //This is where the result goes. Set to the experiment called from further down. 899 is popt default.
+int tmp_int=10;
+int choice_ok = 0;
+float offset_hz = 150000; //region of tube to observe over (+/-)
+float offset_inc = 1; //The offset between each slice;
+float exp_gradient = 50; //The gradient strength to use;
+float gradient_upper_limit = 95; //max gradient power;
+float bottom_hz = 0-offset_hz;
+float tmpfloat = 0;
+char tmpstr[1024];
+char qtext[1024];
+char titlefile[PATH_MAX];
+FILE *ftitle = NULL;
+/*insert user interaction here for gradient, number slices, offset and checking.*/
+
+while (choice_ok != 2) //have to get two things correct...
+{
+	choice_ok = 0;
+	GETINT("What offset in hz away from 0 to takes slices over. With 1H and a 50% gradient, 160000 covers the tube.",offset_hz);
+	if ( (offset_hz < 0) || (offset_hz > 200000) ) 
+	{
+		Proc_err(INFO_OPT, "%f is a crazy number, try again",offset_hz);
+	}
+	else {
+		choice_ok++;
+	}
+	
+	if ( (offset_hz < slice_hz)  )
+	{
+		Proc_err(INFO_OPT, "Offset needs to be more or equal to slice width - %i",slice_hz);
+	}
+	else {
+		choice_ok++;
+	}
+	
+}
+
+choice_ok = 0; //in case we want to use this method again
+bottom_hz = 0-offset_hz;
+//Now set slice width
+for(;;)
+{
+	sprintf(qtext, "What slice width in Hz would you like. Carefull, may lead to long, powerful pulses. Stick with the default if possible. Hardcoded limits are :- Min = %i Max = %i",slice_hz_lower_limit,slice_hz_upper_limit);
+	GETINT(qtext,slice_hz)
+	if(slice_hz >= slice_hz_lower_limit && slice_hz <= slice_hz_upper_limit )
+		{break;}
+}
+//Now set number of slices
+while (choice_ok != 2) //have to get two things correct...
+{
+	choice_ok = 0;
+	GETINT("Number of slices on either side of zero",tmp_int);
+	tmpfloat = ((offset_hz*2)/(tmp_int*2));
+	if ( ( (tmp_int < 0) || (tmp_int > 50) ) )
+		{
+		Proc_err(INFO_OPT, "%i is a crazy number, try again",tmp_int);
+		}
+		else {
+		choice_ok++;
+		}	
+	if ( (tmpfloat < slice_hz) )
+		{
+		Proc_err(INFO_OPT, "%i gives an offset increment less than the slice width, which doesn't make sense",tmp_int);
+		Proc_err(INFO_OPT, "The slice width would be %f and needs to be more than %i", tmpfloat,slice_hz);
+		}
+		else {
+		choice_ok++;
+		}
+	
+	
+}
+choice_ok = 0; //in case we want to use this method again
+num_slices = (tmp_int *2)+1; //we want it to go through 0 really
+
+//Now set gradient strength
+for (;;)
+{
+	sprintf(qtext, "What gradient strength would you like? (Less than %f)",gradient_upper_limit);
+	GETFLOAT(qtext,exp_gradient);
+	if(gradient_upper_limit >=1 && exp_gradient <= gradient_upper_limit )
+		{break;}
+}
+
+
+GETCURDATA
+RPAR("slice-select-2d","all")
+GETCURDATA
+result_exp=expno;
+/*setup 2d parameters*/
+STOREPARN(1,"TD", num_slices)
+STOREPARNS(1,"TD", num_slices)
+FETCHPARN(1,"TD", &tmp_int)
+Proc_err(INFO_OPT,"Fetched TD = %i",tmp_int);
+GETCURDATA
+/*setup temp experiment to run the slices in*/
+DATASET(name,temp_exp_num,1,disk,user) 
+VIEWDATA_SAMEWIN
+RPAR("slice-select","all")
+SETCURDATA
+XAU("wvm", "-a") //run wavemaker to set pulses
+offset_inc = (offset_hz*2)/(num_slices-1); //because we're calculating the gaps...
+offset_hz = bottom_hz; //starts with negative value, which is bottom of tube
+GETCURDATA
+
+sprintf( titlefile, "%s%s/%s/%i/pdata/1/title", disk, user, name, result_exp);
+sprintf( tmpstr, "Slice selective NMR.  No. Slices - %i Slice width in Hz - %i  Gradient strength percent - %f", num_slices, slice_hz, exp_gradient );
+ftitle = fopen( titlefile, "w");
+	fputs( tmpstr, ftitle);	
+fclose( ftitle );
+
+TIMES(num_slices) //we want it to go through 0 really
+	loop++;
+	STOREPAR("SPOFFS 1",offset_hz)
+	sprintf(tmpstr,"\nLoop = %i Spoffs1 = %f ",loop,offset_hz);
+	Proc_err(INFO_OPT,"%s",tmpstr);
+	//ZG
+	//WSER(loop,name,result_exp,1,disk,user)
+	ftitle = fopen( titlefile, "a");
+		fputs( tmpstr, ftitle);	
+	fclose( ftitle );
+	
+	offset_hz = offset_hz+offset_inc;
+END
+DATASET(name,result_exp,1,disk,user) //go back to datset called from with the written ser file in
+VIEWDATA_SAMEWIN
+QUIT
+	
+

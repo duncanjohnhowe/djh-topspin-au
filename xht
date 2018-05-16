@@ -1,0 +1,673 @@
+/*** ^^A -*-C++-*- **********************************************/
+/*      proc_had                        18.01.2015              */
+/****************************************************************/
+/*      Short Description :                                     */
+/*      AU program for Hadamard transform data along F1         */
+/****************************************************************/
+/*      Keywords :                                              */
+/*      Hadamard                                                */
+/****************************************************************/
+/*      Description/Usage :                                     */
+/****************************************************************/
+/*      Author(s) :                                             */
+/*      Name            : Eriks Kupce                           */
+/*      Organisation    : Bruker BioSpin                        */
+/*      Email           : Eriks.Kupce@bruker.co.uk              */
+/****************************************************************/
+/*      Name            Date    Modification:                   */
+/*      wem             150118  created                         */
+/****************************************************************/
+/*
+$Id: proc_had,v 1.1 2015/01/03 09:15:03 wem Exp $
+*/
+
+AUERR = proc_had(curdat);
+QUIT
+
+#ifdef	HAS_WINDOWS_FEATURES
+#ifndef	__GNUC__
+#include <float.h>
+#define finite _finite
+#endif	/* __GNUC__	*/
+#endif	/* HAS_WINDOWS_FEATURES	*/
+
+static int nat_Hm(int mx, int cx, int rx)   // matrix of size mx
+{
+  int  i, j, k, ii, jj, ix=0;
+
+  if(rx < 2) return 1;
+  ii=cx-1; jj=rx-1;
+  for(k=1; k<mx; k*=2);
+
+  j=1; i=1;
+  while((j*=2)<=jj) i=j;
+
+  ix = 2*((ii/i)%2);
+
+  j=i>>1;
+  while(j>0)
+  {
+    if((i+j) < rx)
+    {
+      ix = (ix + 2*((ii/j)%2))%4;
+      i+=j;
+    }
+    j >>= 1;
+  }
+  return 1-ix;
+}
+
+
+static void inflate_ht(double* obuf, double *pkl, double bw1, double sw1,
+		       int npk, int iofs, int si1, int td2, int td1)
+{
+  int i, j, k, i1, j1, ii, jj, kk;
+  double dr1, sw12;
+
+//	for(j=0; j<npk; j++) printf("%4d, fq = %.2f \n", j, pkl[j]);
+
+  sw12= 0.5*sw1;
+  dr1 = sw1/(double) (si1-1);
+  k = npk-1;
+  kk = npk+iofs;
+  for(j=td1-1; j>=0; j--)      // bw1 not used here
+  {
+    j1 = j * td2;
+    if((j<kk) && (j>=iofs))
+    {
+      i = si1 - (int) (0.5 + (pkl[k]+sw12)/dr1);
+      i1 = i * td2;        // new position
+      for(i=0; i<td2; i++)
+      {
+        ii = (i1+i) * 2;  // new position
+        jj = (j1+i) * 2;  // old position
+        obuf[ii] = obuf[jj];
+        obuf[ii + 1] = obuf[jj + 1];
+      }
+      k--;
+    }
+    for(i=0; i<td2; i++)
+    {
+      jj = (j1+i) * 2;
+      obuf[jj] = 0.0; obuf[jj + 1] = 0.0;
+    }
+  }
+}
+
+
+static double* get_ht_pks_fp(FILE* fp, const char* path,
+			     int *npk, int *iofs, double *bw)
+{
+  char  str[512];
+  int   j = 1;
+  int   ii = 0;
+  int   jj = 0;
+  double* pkl = 0;
+
+  while (fgets(str, (int)sizeof(str), fp) && (jj < j))
+  {
+    if (str[0] != '#')
+    {
+      if (ii)
+	sscanf(str, "%lf", pkl + jj++);
+      else
+      {
+	ii = 1;
+
+	if (sscanf(str, "%d %d %lf", npk, iofs, bw) != 3)
+	{
+	  Proc_err(DEF_ERR_OPT, "%s\n%s",
+		   "Incorrect file format (first line missing).", path);
+	  return 0;
+	}
+
+	j = *npk;
+
+	if (j <= 0)
+	{
+	  Proc_err(DEF_ERR_OPT, "%s\n%s", "Incorrect file format.", path);
+	  return 0;
+	}
+
+	if (j * (double)sizeof(double) >= 4. * 1024 * 1024 * 1024)
+	{
+	  Proc_err(DEF_ERR_OPT, "%.0f %s",
+		   (j * (double)sizeof(double)) / (1024 * 1024),
+		   "MB buffer space too large");
+	  return 0;
+	}
+
+	pkl = (double*)calloc(j, sizeof(double));
+
+	if (pkl == 0)
+	{
+	  Proc_err(DEF_ERR_OPT, "%s %.0f %s", "Cannot allocate",
+		   (j * (double)sizeof(double)) / (1024 * 1024),
+		   "MB memory");
+	  return 0;
+	}
+      }
+    }
+  }
+
+  return pkl;
+}
+
+static double* get_ht_pks(int *npk, int *iofs, double *bw)
+{
+  char    path[PATH_MAX];
+  FILE*   fp;
+  double* pkl;
+
+  strcpy(path, ACQUPATH("ht.pkl"));
+
+  if ((fp = fopen(path, "r")) == NULL)       /* open new logfile */
+  {
+    Proc_err(DEF_ERR_OPT, "%s\n%s", "Cannot open file for reading", path);
+    return 0;
+  }
+
+  pkl = get_ht_pks_fp(fp, path, npk, iofs, bw);
+
+  fclose(fp);
+  return pkl;
+}
+
+static int had_f1(double* obuf, double* ibuf, double bw, double sw1, int si1, int td2, int td1)  // need si1
+{
+  int i, j, k, ii, jj, kk, jx, npk, iofs;
+  double  bw1;
+  double* pkl = 0;
+
+  npk = 0; iofs=0;
+
+  if(si1 > td1)
+  {
+    pkl = get_ht_pks(&npk, &iofs, &bw1);
+
+    if (pkl == 0)
+      return -1;
+  }
+
+  if(bw > 0.0) bw1 = bw;
+
+  k=si1*td2;
+  for(i=0; i<k; i++) obuf[i] = 0.0;
+
+  for(k=iofs; k<td1; k++)   // Hadamard offset iofs - by default = 1
+  {
+    jj = k * td2;
+    for(j=0; j<td1; j++)
+    {
+      jx = nat_Hm(td1, k+1, j+1);
+      for(i=0; i<td2; i++)
+      {
+        ii = (j * td2 + i) * 2;
+        kk = (jj + i) * 2;
+        obuf[kk] += jx*ibuf[ii];
+        obuf[kk + 1] += jx*ibuf[ii + 1];
+      }
+    }
+  }
+
+  if(npk>0) inflate_ht(obuf, pkl, bw1, sw1, npk, iofs, si1, td2, td1);
+
+  return 0;
+}
+
+
+static int getscale(double* obuf, int size, int ncproc)
+{
+  int i = 0;
+  double xm = 0;
+
+  do
+  {
+    double x = obuf[i];
+
+    if (finite(x) == 0)
+      return MAXINT;
+
+    if (x < 0)
+      x = -x;
+
+    if (xm < x)
+      xm = x;
+  }
+  while (++i < size);
+
+  if (xm == 0)
+    return ncproc;
+
+  i = 0;
+
+  while (xm > (double)(MAXINT / 2))
+  {
+    xm /= 2;
+    i++;
+  }
+
+  while (xm < (double)(MAXINT / 4))
+  {
+    xm *= 2;
+    i--;
+  }
+
+  return i;
+}
+
+
+static void updatemaxmin(int* iobuf, int* maxp, int* minp, int size)
+{
+  if (maxp  &&  minp)
+  {
+    int imax = *maxp;
+    int imin = *minp;
+    int i = 0;
+
+    do
+    {
+      int ival = iobuf[i];
+
+      if (imax < ival)
+        imax = ival;
+
+      if (imin > ival)
+        imin = ival;
+    }
+    while (++i < size);
+
+    *maxp = imax;
+    *minp = imin;
+  }
+
+}
+
+static void unshuffle(double* obuf, int* iobuf, double scale,
+		      int td2, int xdim2, int xdim1)
+{
+  int j = 0;
+
+  td2 /= 2;
+
+  do
+  {
+    int i = 0;
+
+    do
+      iobuf[((i / xdim2) * xdim1 + j) * xdim2 + i % xdim2] =
+      (int)(scale * obuf[(j * td2 + i) * 2]);
+    while (++i < td2);
+  }
+  while (++j < xdim1);
+
+}
+
+static int writefd(double* obuf, int* iobuf, const char* name, int fd,
+		   double scale, int* maxp, int* minp,
+		   int td2, int si2, int si1, int xdim2, int xdim1)
+{
+  size_t wsiz = (size_t)si2 * (size_t)xdim1 * sizeof(int);
+  size_t oinc = (size_t)td2 * (size_t)xdim1;
+  int    i = 0;
+
+  do
+  {
+    unshuffle(obuf, iobuf, scale, td2, xdim2, xdim1);
+    updatemaxmin(iobuf, maxp, minp, td2 * xdim1 / 2);
+
+    if (write(fd, iobuf, wsiz) < 0)
+    {
+      Perror(DEF_ERR_OPT, name);
+      return -1;
+    }
+
+    obuf += oinc;
+  }
+  while ((i += xdim1) < si1);
+
+  return 0;
+}
+
+static int writefds(double* obuf, int* iobuf, int fdr, int fdi,
+		    double scale, int* maxp, int* minp,
+		    int td2, int si2, int si1, int xdim2, int xdim1)
+{
+  memset(iobuf, 0, si2 * xdim1 * sizeof(int));
+
+  if (writefd(obuf, iobuf, PROCPATH("2rr"), fdr,
+              scale, maxp, minp, td2, si2, si1, xdim2, xdim1) < 0)
+    return -1;
+
+  if (writefd(obuf + 1, iobuf, PROCPATH("2ir"), fdi,
+              scale, 0, 0, td2, si2, si1, xdim2, xdim1) < 0)
+    return -1;
+
+  return 0;
+}
+
+static void inshuffle(double* ibuf, int* iobuf, double scale,
+		      int td2, int xdim2, int xdim1)
+{
+  int j = 0;
+
+  td2 /= 2;
+
+  do
+  {
+    int i = 0;
+
+    do
+      ibuf[(j * td2 + i) * 2] =
+      scale * (double)iobuf[((i / xdim2) * xdim1 + j) * xdim2 + i % xdim2];
+    while (++i < td2);
+  }
+  while (++j < xdim1);
+
+}
+
+static int readfd(double* ibuf, int* iobuf, const char* name, int fd,
+		  double scale, int bytordp,
+		  int si2, int td2, int td1, int xdim2, int xdim1)
+{
+  size_t rsiz = (size_t)si2 * (size_t)xdim1 * sizeof(int);
+  size_t iinc = (size_t)td2 * (size_t)xdim1;
+  int    i = 0;
+
+  do
+  {
+    ssize_t sret = read(fd, iobuf, rsiz);
+
+    if (sret < 0)
+    {
+      Perror(DEF_ERR_OPT, name);
+      return -1;
+    }
+
+    if ((size_t)sret < rsiz)
+    {
+      Proc_err(DEF_ERR_OPT, "%s\n%s", name, "read off limits");
+      return -1;
+    }
+
+    local_swap4(iobuf, (int)rsiz, bytordp);
+    inshuffle(ibuf, iobuf, scale, td2, xdim2, xdim1);
+    ibuf += iinc;
+  }
+  while ((i += xdim1) < td1);
+
+  if (lseek(fd, (off_t)0, SEEK_SET) == -1)
+  {
+    Perror(DEF_ERR_OPT, name);
+    return -1;
+  }
+
+  return 0;
+}
+
+static int readfds(double* ibuf, int* iobuf, int fdr, int fdi,
+		   double scale, int bytordp,
+		   int si2, int td2, int td1, int xdim2, int xdim1)
+{
+  if (readfd(ibuf, iobuf, PROCPATH("2rr"), fdr,
+             scale, bytordp, si2, td2, td1, xdim2, xdim1) < 0)
+    return -1;
+
+  if (readfd(ibuf + 1, iobuf, PROCPATH("2ir"), fdi,
+             scale, bytordp, si2, td2, td1, xdim2, xdim1) < 0)
+    return -1;
+
+  return 0;
+}
+
+static int procfd(const char* curdat, double* obuf, int fdr, int fdi,
+		  int si2, int si1, int td2, int td1, int xdim2, int xdim1)
+{
+  char audittext[512];
+  int  size[2], xdim[2];
+  int  bytordp, ncproc, i;
+  int  imax = 0;
+  int  imin = 0;
+  double  x, sf1, a1, a2, bw, o1p, scale = 1.0, sw1 = 1000.0;
+  double* ibuf = obuf + td2 * si1;                         // ?????
+  int*   iobuf = (int*)(ibuf + td2 * td1);                 // ???
+  char* auditp = audittext + sprintf(audittext, "Hadamard Transform");
+  char* ep;
+
+  FETCHPARS("BYTORDP", &bytordp);
+  FETCHPARS("NC_proc", &ncproc);
+  FETCHPAR1S("O1", &o1p);
+  FETCHPAR1S("SFO1", &sf1);
+  FETCHPAR1("SW_h", &sw1);
+  o1p /= sf1;
+  i = ncproc;
+
+  while (i > 0)
+  {
+    scale *= 2;
+    i--;
+  }
+
+  while (i < 0)
+  {
+    scale /= 2;
+    i++;
+  }
+
+  bw = -1.0;  // accept external arg for bw
+
+
+  if (i_argc > 2)
+  {
+    x = strtod(i_argv[2], &ep);
+    if (ep != i_argv[2])
+      bw = x;
+  }
+
+
+  if (readfds(ibuf, iobuf, fdr, fdi, scale, bytordp,
+              si2, td2, td1, xdim2, xdim1) < 0)
+    return -1;
+
+  if (had_f1(obuf, ibuf, bw, sw1, si1, td2/2, td1) < 0)
+    return -1;
+
+  i = getscale(obuf, td2 * si1, ncproc);
+
+  if (i == MAXINT)
+  {
+    Proc_err(DEF_ERR_OPT, "Cannot convert to integer values");
+    return -1;
+  }
+
+  bytordp = local_endian();
+  STOREPARS("BYTORDP", bytordp);
+  STOREPARS("NC_proc", i);
+
+  scale = 1;
+
+  while (i > 0)
+  {
+    scale /= 2;
+    i--;
+  }
+
+  while (i < 0)
+  {
+    scale *= 2;
+    i++;
+  }
+
+  if (writefds(obuf, iobuf, fdr, fdi, scale, &imax, &imin,
+               td2, si2, si1, xdim2, xdim1) < 0)
+    return -1;
+
+  x = (double) (si1/2);
+  a1 = sw1/(double) (si1-1);
+  a2 = a1*x/sf1;
+  a1 *= (x-1.0)/sf1;
+
+  STOREPAR1S("TDeff", si1)
+  STOREPAR1S("SW_h", sw1)
+  STOREPARS("YMAX_p", imax);
+  STOREPARS("YMIN_p", imin);
+  STOREPAR1S("AXLEFT", o1p+a2);
+  STOREPAR1S("AXRIGHT", o1p-a1);
+  STOREPAR1S("AXUNIT", "ppm");
+
+  size[0] = si2;
+  size[1] = si1;
+  xdim[0] = xdim2;
+  xdim[1] = xdim1;
+
+  if (CheckSumFile(PROCPATH("2rr"), 0, auditp, 0, 0, bytordp, 0, 2,
+                   size[0], size, xdim) > 0)
+    AuditAppend(PROCPATH("auditp.txt"), audittext);
+
+  return 0;
+}
+
+static int procri(const char* curdat, double* obuf,
+		  int si2, int si1, int td2, int td1, int xdim2, int xdim1)
+{
+  int ret;
+  int fdi;
+  int fdr = open(PROCPATH("2rr"), O_RDWR);
+
+  if (fdr == -1)
+  {
+    Perror(DEF_ERR_OPT, PROCPATH("2rr"));
+    return -1;
+  }
+
+  fdi = open(PROCPATH("2ir"), O_RDWR);
+
+  if (fdi == -1)
+  {
+    Perror(DEF_ERR_OPT, PROCPATH("2ir"));
+    close(fdr);
+    return -1;
+  }
+
+  ret = procfd(curdat, obuf, fdr, fdi, si2, si1, td2, td1, xdim2, xdim1);
+  close(fdi);
+  close(fdr);
+
+  return ret;
+}
+
+
+static int mem_had(const char* curdat)
+{
+  int si2, si1, si_1;
+  int td2, td1, tdx1;
+  int xdim2, xdim1;
+  int ret;
+  double* dbuf;
+  double x;
+
+  FETCHPARS( "TDeff", &td2)
+  FETCHPAR1S("TDeff", &td1)
+  FETCHPARS( "SI",    &si2)
+  FETCHPAR1S("SI",    &si1)
+  FETCHPARS( "XDIM",  &xdim2)
+  FETCHPAR1S("XDIM",  &xdim1)
+
+  si_1 = si1;
+  if((si_1 > 512) || (si_1 < td1))
+  {
+    GETINT("Spectrum size in F1 (SI 1):", si_1)  // a precautionary measure
+    if(si1 != si_1)
+    {
+      si1 = si_1;
+      STOREPAR1S("SI", si1)
+    }
+  }
+
+/* input buffer ibuf contains td1 fids consisting of td2 / 2	*/
+/* complex points (re followed by im)				*/
+/* output buffer obuf of si1 fids/spectra consisting of td2 / 2	*/
+/* complex points must be completely filled with valid data	*/
+
+  if (si2 == xdim2  &&  si2 > 128)
+    xdim1 = 4;
+
+  tdx1 = td1;
+
+  if (tdx1 < xdim1)
+    tdx1 = xdim1;
+
+  x = (double)td2 * (double)si1   * (double)sizeof(double) +              // out.buff
+      (double)td2 * (double)tdx1  * (double)sizeof(double) +              // in.buff
+      (double)si2 * (double)xdim1 * (double)sizeof(int);
+
+  if (x >= 4. * 1024 * 1024 * 1024)
+  {
+    Proc_err(DEF_ERR_OPT, "%.0f %s", x / (1024 * 1024),
+                          "MB buffer space too large");
+    return -1;
+  }
+
+  dbuf = (double*)malloc((size_t)x);      // this is obuf
+
+  if (dbuf == 0)
+  {
+    Proc_err(DEF_ERR_OPT, "%s %.0f %s", "Cannot allocate",
+                          x / (1024 * 1024), "MB memory");
+    return -1;
+  }
+
+  ret = procri(curdat, dbuf, si2, si1, td2, td1, xdim2, xdim1);
+  free(dbuf);
+
+  return ret;
+}
+
+
+int proc_had(const char* curdat)
+{
+  int wdw, bcmod, memod, ftmod, phmod;
+  int fnmode, parmode;
+  int ret, mc2;
+
+  FETCHPARS("PARMODE", &parmode)
+
+  if (parmode != 1)
+    STOPMSG("Program only suitable for 2D raw data")
+
+  FETCHPAR1S("FnMODE", &fnmode)
+  FETCHPAR1("MC2", &mc2)
+
+  if(fnmode != 0) STOREPAR1S("FnMODE", 0)
+  if (mc2 != 2) STOREPAR1("MC2", 2)      // the current implementation requires MC = TPPI !
+
+  FETCHPAR("WDW",    &wdw)
+  FETCHPAR("BC_mod", &bcmod)
+  FETCHPAR("ME_mod", &memod)
+  FETCHPAR("FT_mod", &ftmod)
+  FETCHPAR("PH_mod", &phmod)
+
+  STOREPAR("WDW",    0)
+  STOREPAR("BC_mod", 0)
+  STOREPAR("ME_mod", 0)
+  STOREPAR("FT_mod", 0)
+  STOREPAR("PH_mod", 0)
+
+  XTRF2
+  ret = AUERR;
+
+  STOREPAR("WDW",    wdw)
+  STOREPAR("BC_mod", bcmod)
+  STOREPAR("ME_mod", memod)
+  STOREPAR("FT_mod", ftmod)
+  STOREPAR("PH_mod", phmod)
+
+  if (ret >= 0)
+  {
+    ret = mem_had(curdat);
+    XF2
+    ERRORABORT
+  }
+  Show_meta(SM_PROC | SM_PROCP | SM_RAWP);
+  return ret;
+}

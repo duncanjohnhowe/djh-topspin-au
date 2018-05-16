@@ -1,0 +1,74 @@
+/*
+Program:	as_juptxt
+Version:	1.1
+Author:		Sean Lynn
+Description:	Updates jup.txt archive file
+*/
+
+#include <stdio.h>
+
+char titlefile[80], jupfile[80], jupline[80], name_line[80], LNB_line[80], chemist_line[80], icon_line[80];
+char solvent[80], experiment[80], expttime[80], protocol[80];
+char iconExp[20], iconSolv[20], iconDisk[5], iconUser[20];
+char *field;
+int cpos, speccheck;
+
+time_t lt;
+FILE *ftitle;
+FILE *fjup;
+GETCURDATA
+
+//only update juptxt for standard spectrum names
+speccheck = 0;
+if( strchr(name, 'PT' )) speccheck = 1;
+if( strchr(name, 'AG' )) speccheck = 1;
+if( speccheck == 0) return(0);
+
+FETCHPAR( "SOLVENT", &solvent)
+
+//open titlefile and extract lines
+sprintf( titlefile, "%s/data/%s/nmr/%s/%d/pdata/%d/title", disk, user, name, expno, procno );
+if (( ftitle = fopen(titlefile, "r") ) != NULL)
+	{
+	fgets( name_line, 80, ftitle);
+	name_line[strlen(name_line) -2] = NULL;
+	fgets( LNB_line, 80, ftitle);
+	LNB_line[strlen(LNB_line)-2] = NULL;
+	fgets( chemist_line, 80, ftitle);
+	chemist_line[ strlen(chemist_line)-2] = NULL;
+	fgets( icon_line, 80, ftitle);
+	icon_line[ strlen( icon_line )-2] = NULL;
+
+  //extract detials from icon line
+	field = strtok( icon_line, " " );
+	strcpy( iconExp, field );
+	field = strtok(NULL, " " );
+	strcpy( iconSolv, field );	
+	field = strtok(NULL, " " );
+	strcpy( iconDisk, field );	
+	field = strtok( NULL, " " );
+	strcpy( iconUser, field );
+	field = strtok( NULL, " " );
+	sscanf( field, "%d", &cpos );
+
+	//time stamp
+	lt=time(NULL);
+	sprintf(expttime, ctime(&lt));
+	expttime[strlen(expttime)-1]=NULL;
+	
+	//protocol
+	sprintf( protocol, "Tailored Experiment");
+
+	sprintf( jupfile, "C:/chemist/jup.txt" );
+	if (( fjup = fopen( jupfile, "a+") ) != NULL)
+ 	{
+	 sprintf( jupline, "%s,%d,%s,%s,%s,%s,%d,%s,%s\n", name, expno, LNB_line, chemist_line, solvent, iconExp, cpos, expttime, protocol );
+	 //Proc_err(INFO_OPT, "%s", jupline);
+	 //sleep(2);
+   fputs( jupline, fjup );
+	 fclose( fjup );
+	 }
+	fclose( ftitle );
+	}
+   
+QUIT

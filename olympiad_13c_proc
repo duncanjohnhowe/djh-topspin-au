@@ -1,0 +1,67 @@
+float cdcl3sino; 
+float peak1sino;
+float peak2sino;
+float peak3sino;
+int nexpt;
+char tmp_str[180], waitfile[80], titlefile[256], titletext[512],tmp_fname[100],diskunit[40], pdfname[]="d:/disk2/data/olympiad/pdf/";
+FILE *ftitle = NULL;
+
+XMAC("olympiad-13c-mac");
+
+GETCURDATA;
+DATASET( name, 6001, 1, disk, "olympiad");
+
+
+XCMD("noisf1 -10");
+XCMD("noisf2 -15");
+XCMD("sigf1 77.6");
+XCMD("sigf2 76.8");
+XCMD("sino");
+FETCHPARS("SINO", &cdcl3sino);
+
+XCMD("sigf1 194.6");
+XCMD("sigf2 193.4");
+XCMD("sino");
+FETCHPARS("sino", &peak1sino);
+
+XCMD("sigf1 56.4");
+XCMD("sigf2 55.2");
+XCMD("sino");
+FETCHPARS("sino", &peak2sino);
+
+XCMD("sigf1 32.8");
+XCMD("sigf2 31.5");
+XCMD("sino");
+FETCHPARS("sino", &peak3sino);
+
+/*sprintf( titletext, "%s \n CDCl3 sino = %f\n Peak 1 sino (196.6-193.4)= %f  Ratio %f:1 \n Peak 2 sino (56.4-55.2) = %f  Ratio %f:1 \n Peak 3 sino (32.8-31.5)= %f  Ratio %f:1 \n", \
+ name, cdcl3sino, peak1sino, (peak1sino/cdcl3sino), peak2sino,(peak2sino/cdcl3sino), peak3sino,(peak3sino/cdcl3sino) );
+*/
+
+sprintf(titletext, "%s\n", name);
+sprintf( titlefile, "%s/data/%s/nmr/%s/%i/pdata/1/title", disk, user, name, expno);
+ftitle = fopen( titlefile, "w");
+fputs( titletext, ftitle);
+fclose( ftitle);
+
+sprintf( pdfname, "%s%s_%d.pdf", pdfname, name, expno);
+XCMD("autoplot");
+AUTOPLOT_TO_FILE(pdfname);
+
+
+sprintf( titletext, "%s \n CDCl3 sino = %f\n Peak 1 sino (196.6-193.4)= %f  Ratio %f:1 \n Peak 2 sino (56.4-55.2) = %f  Ratio %f:1 \n Peak 3 sino (32.8-31.5)= %f  Ratio %f:1 \n", \
+ name, cdcl3sino, peak1sino, (peak1sino/cdcl3sino), peak2sino,(peak2sino/cdcl3sino), peak3sino,(peak3sino/cdcl3sino) );
+
+sprintf( titlefile, "%s/data/%s/nmr/%s/%i/pdata/1/title", disk, user, name, expno);
+ftitle = fopen( titlefile, "w");
+fputs( titletext, ftitle);
+fclose( ftitle);
+
+
+sprintf (pdfname, "d:/disk2/data/olympiad/pdf-sn/");
+sprintf( pdfname, "%s%s_%d.pdf", pdfname, name, expno);
+AUTOPLOT_TO_FILE(pdfname);
+
+QUIT
+
+

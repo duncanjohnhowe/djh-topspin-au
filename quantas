@@ -1,0 +1,295 @@
+/*** ^^A -*-C++-*- **********************************************/
+/*	quantas Alpha test V2	19.06.2008            */
+/*   Use, test and validate at your own risk as with any free unofficial alpha test software! */
+/****************************************************************/
+/*	Description :					*/
+/*  This AU program adds a standard signal to a dataset so   */
+/*  that it can be integrated at a defined concentration.     */
+/*  It relies on having an artificial signal at a known intensity */
+/*  standardised against a known concentration sample.         */
+/*  INPUT Requirements: */
+/*  The reference dataset is called QUANTAS_<NUCLEUS>(<_SOLVENT>) and contains  */
+/*    EXPNO 10 <peakexpno> - artificial signal calibrated against reference sample     */
+/*    EXPNO 11 <refexpno> - reference sample of known concentration                   */
+/*  Different reference datasets can be used for different solvent on a fixed tuned system */
+/*  The artificial signal spectrum (e.g QUANTAS_1H, expno 10) must contain 3 user variables, */
+/*  USERA1 =  scaling factor required to make the artificial signal read 'n' mM */
+/*            when added to the reference */
+/*  USERA2 =  Nominal concentration of artificial signal 'n' (mM)*/
+/*  USERA3 =  Chemical shift for where the signal is placed */
+/*  The following parameters are used from the reference sample spectrum (e.g. QUANTAS_1H, expno 11) */
+/*  PULPROG=  Pulse program from reference e.g zg or zg30 */
+/*  P1     =  P1 from reference - calibrated 90-degree pulse for non salty sample(us) for pulcon correction */
+/*  NS     =  NS from reference
+/*  RG     =  RG from reference - assumes linear reciever (or use fixed gain)
+/*  PULCON Correction factors can be applied to compensate for salt effects on receptivity*/
+/*    P1 in reference signal spectrum must be set to standard 90-degree pulse, 
+/*    and P1 in current dataset must be calibrated for sample. */
+/*  OUTPUT: */
+/*  The program creates a new dataset in procno 100 with the artificial signal added and integrals calibrated */
+/*  sample_info.prop file is written to dataset - see sample tab in TOPSPIN */
+/*  If copyflag = 1 (default), see below, then: */
+/*  The artificial peak dataset is copied to expno 990 <copypeakexpno> (if unused) for future reference */
+/*  The reference sample dataset is copied to expno 991 <copyrefexpno> (if unused) for future reference */ 
+/*  These expnos are incremented if they already exist  */
+
+/****************************************************************/
+/*  Other Requirements:  */
+/*  'refint2' AU program is used to set integral labels correctly */
+/*  'intregion' AU program called by refint2 */
+/*  edit lines below for 'quantcmd' - choose between TOPSPIN 2.1 or TOPSPIN 2.0 and prior versions */
+/*  The 'Bruker/TOPSPIN/GNU/bin' directory must be listed as a PATH*/
+/*  environment variable for WINDOWS systems. This is only for the title modification*/
+/*  'as_1Hquant.xwp' layout file for plotting region including reference */
+/****************************************************************/
+/*	Keywords :						*/
+/*	quantification						*/
+/****************************************************************/
+/*	Author(s) :						*/
+/*	Name		: John Hollerton, Sean Lynn (after an idea by Richard Upton)	*/
+/*	Organisation	: GlaxoSmithKline R&D			*/
+/*	Email		: richard.j.upton@gsk.com		*/
+/****************************************************************/
+/*	Name		Date	Modification:			*/
+/*  sml   080401  calibration reference dataset preserved in QUANTAS dataset  */
+/*  sml   080328  solvent specific quantas datasets added - solvent correction table removed */ 
+/*  sml   080328  TOPSPIN 2.1 modification      */
+/*  sml   071018  pulcon correction factor added */
+/*  sml   071018  solvent correction factor added */
+/*  sml   070328  pulseprogam check added */
+/*	jch		070308	modified for multi-nuclei			*/
+/*	jch		070208	created				*/
+/****************************************************************/
+/*
+/*calibrated at ambient temperature which was 30 Centigrade/400litre per hour N2 28/3/2007 SML & RJU
+*/
+
+#define INTLIST "integrals.txt"  // OK with xwin, required for topspin
+#define MAXINT 2048
+//definitions & options
+int copyflag = 1; // set to 1 to copy calibration and quantas data to dataset of interest
+int refexpno = 11; //expno of reference for conc. calibration
+int peakexpno = 10; //expno of artificial peak
+int copypeakexpno = 990;
+int copyrefexpno;
+int copycheck;
+
+int origexpno,origprocno; //expno and procno of dataset of interest
+int refscans;  // number of scans from reference
+int sampscans; // number of scans in dataset of interest
+float refrg; // receiver gain in reference
+float samprg; // receiver gain in dataset of interest
+float rgfactor; // ratio of sample to reference receiver gain
+float refshift; // chemical shift of artificial peak (ppm) - USERA3
+float refwidth; // width of integral region around ref peak - adjusted for nucleus
+float scalingfactor; // overall scaling factor applied to reference dataset prior to addition
+float pulconfactor; // ratio of system standard P1 to actual P1 used in current dataset.
+float nominalconc;  // nominal concentration for artificial peak (in mM) - USERA2
+float refp1;  // calibrated system standard 90 pulse (us) - P1 from reference
+float samplep1; // calibrated 90 pulse used in dataset of interest - P1 from dataset
+float samptemp; // sample temperature
+float reftemp; // reference temperature
+float tempfactor; // temperature correction factor
+float refphc0; // reference phase0 - indicator of tuning
+float sampphc0; // sample phase0 - indicator of tuning
+double scanfactor = 1.0;// ratio of sample to reference number of scans
+double refscalingfactor; // base artificial peak scaling factor - USERA1
+double cal; //absolute intensity parameter
+char datasetname[200]; //filename of dataset of interest (current sample dataset)
+char refname[80]; //name of the reference dataset - QUANTAS_nuc(_solv) (e.g 'QUANTAS_1H' or 'QUANTAS_1H_CDCl3')
+char nucleus[8]; //nucleus of the dataset of interest to select correct QUANTAS reference
+char solvent[20]; //solvent used in dataset of interest
+char refpulseprogram[40];  //pulse program used to calibrate reference - PULPROG in QUANTAS
+char samppulseprogram[40];  //pulse program in dataset of interest - PULPROG in sample dataset
+char addcommand[290]; // command string for adding spectra
+char tmpstr[80]; // temporary string for reading parameters from reference
+char newtitle[400];
+char filecheck[100];
+char sample_info[200];  //sample tab file
+char oldtitlefile[200], newtitlefile[200];
+char cpcmd[200];
+char quantcmd[200];
+char layout[200];  //name of special layout file - if required
+
+FILE *fout, *fnewtitle, *finfo;
+
+GETCURDATA
+
+if( procno == 100 ) 
+  {
+  Proc_err(INFO_OPT, "cannot run from procno = %d", procno);
+  return(0);
+  }
+sprintf(oldtitlefile,"%s/data/%s/nmr/%s/%d/pdata/%d/title",disk,user,name,expno,procno);
+sprintf(newtitlefile,"%s/data/%s/nmr/%s/%d/pdata/%d/title",disk,user,name,expno,100);
+FETCHPARS("NS",&sampscans)
+FETCHPARS("RG",&samprg)
+FETCHPARS("NUC1",nucleus)
+FETCHPARS("SOLVENT", solvent)
+FETCHPARS("P 1", &samplep1)
+FETCHPARS("TE", &samptemp)
+FETCHPARS("PULPROG", samppulseprogram)
+FETCHPARS("PHC0", &sampphc0)
+//Keep original filename for later
+origexpno=expno;
+origprocno=procno;
+strcpy(datasetname,name);
+//load QUANTAS dataset
+sprintf(refname,"quantas_%s_%s",nucleus, solvent);
+sprintf( filecheck, "%s/data/%s/nmr/%s/%d/pdata/1/1r",disk,user,refname,peakexpno);
+if( access( filecheck, F_OK ) !=0)
+	{
+	sprintf( refname,"quantas_%s",nucleus );
+  sprintf( filecheck, "%s/data/%s/nmr/%s/%d/pdata/1/1r",disk,user,refname,peakexpno);
+  if( access( filecheck, F_OK ) !=0)
+    {
+    Proc_err(INFO_OPT, "could not find reference data set %s", filecheck);
+    return(0);
+    }
+	}
+DATASET(refname,peakexpno,1,disk,user)
+FETCHPAR("USERA1",tmpstr)
+refscalingfactor=atof(tmpstr);
+FETCHPAR("USERA2",tmpstr)
+nominalconc=atof(tmpstr);
+FETCHPAR("USERA3",tmpstr)
+refshift=atof(tmpstr);
+//write QUANTAS peak to dataset of interest for future reference
+if (copyflag == 1)
+	{
+	copycheck = 0;
+	while( copycheck == 0 ) 
+		{
+		sprintf( filecheck, "%s/data/%s/nmr/%s/%d/pdata/1/1r",disk,user,datasetname,copypeakexpno);
+		if( access( filecheck, F_OK ) ==0) copypeakexpno++;
+		else copycheck =1;
+		}
+  	WRPA(datasetname, copypeakexpno, 1, disk, user)
+ 	}
+//load reference sample data if present
+sprintf( filecheck, "%s/data/%s/nmr/%s/%d/pdata/1/1r",disk,user,refname, refexpno);
+if( access( filecheck, F_OK ) !=0)
+	{
+  Proc_err(INFO_OPT, "could not find reference data set %s", filecheck);
+  return(0);
+	}
+DATASET(refname,refexpno,1,disk,user)
+FETCHPARS("P 1", &refp1)
+FETCHPARS("PULPROG", refpulseprogram)
+FETCHPARS("NS", &refscans)
+FETCHPARS("RG", &refrg)
+FETCHPARS("TE", &reftemp)
+FETCHPARS("PHC0", &refphc0)
+//write QUANTAS calibration reference to dataset of interest for future reference
+if (copyflag == 1)
+	{
+	copyrefexpno = copypeakexpno+1;
+	copycheck = 0;
+	while( copycheck == 0 ) 
+		{
+		sprintf( filecheck, "%s/data/%s/nmr/%s/%d/pdata/1/1r",disk,user,datasetname,copyrefexpno);
+		if( access( filecheck, F_OK ) ==0) copyrefexpno++;
+		else copycheck =1;
+		}			
+  WRPA(datasetname, copyrefexpno, 1, disk, user)
+  }
+//check pulseprogram
+if(strcmp( samppulseprogram, refpulseprogram)!= 0)
+  {
+  Proc_err(INFO_OPT, "inconsistent pulse program \n reference = %s current =%s", refpulseprogram, samppulseprogram );
+  return(0);
+  }
+
+//set gain & scan factors
+rgfactor=samprg/refrg;
+scanfactor=sampscans*1.0/refscans*1.0;
+
+//pulcon correction factor
+pulconfactor = 1.0;
+if ( refp1 > 0.0) pulconfactor = refp1 / samplep1;
+
+//temperature correction factor
+tempfactor = reftemp / samptemp;
+
+//Now calculate the overall scaling factor
+scalingfactor=refscalingfactor*scanfactor*rgfactor*pulconfactor*tempfactor;
+
+//Now re-read the original dataset
+DATASET(datasetname,origexpno,origprocno,disk,user)
+//and set up the other datasets to add the reference
+DATASET2(refname,peakexpno,1,disk,user)
+DATASET3(name,expno,100,disk,user)
+
+//add the reference spectrum at the correct scaling factor
+//using the "duadd" command
+STOREPAR("DC",1)
+sprintf(addcommand,"duadd %f %fppm y",refshift,scalingfactor);
+XCMD(addcommand)
+DATASET(datasetname,origexpno,100,disk,user)
+//update title file
+sprintf(newtitle,"\n%.0fmM Reference signal\n added at: %.2f ppm",nominalconc,refshift);
+if((i1=dircp(oldtitlefile, newtitlefile)) < 0) Proc_err(DEF_ERR_OPT, dircp_err(i1));
+fnewtitle=fopen(newtitlefile,"a+");
+if (fnewtitle==NULL) 
+{
+  Proc_err(INFO_OPT," unable to open %s",newtitlefile);
+  sleep(2);
+}
+else
+{
+  fputs(newtitle,fnewtitle);
+  fclose(fnewtitle);
+}
+
+//update sample_info.prop file -see sample tab
+sprintf( sample_info, "%s/data/%s/nmr/%s/%d/sample_info.prop", disk, user, name, expno );
+finfo = fopen( sample_info, "a+");
+fprintf(finfo,"\nI_10100=NM=Reference dataset, NM2=%s\n, HEIGHT=1", refname);
+fprintf(finfo,"\nI_10101=NM=Quantas [mM], NM2= %f\n", nominalconc);
+fprintf(finfo,"\nI_10102=NM=Quantas Shift (ppm), NM2= %f\n", refshift);
+fprintf(finfo,"\nI_10103=NM=Pulse Program, NM2= %s\n", samppulseprogram);
+fprintf(finfo,"\nI_10104=NM=Sample NS, NM2= %d\n", sampscans);
+fprintf(finfo,"\nI_10105=NM=Refer. NS, NM2= %d\n", refscans);
+fprintf(finfo,"\nI_10106=NM=Sample RG, NM2= %f\n", samprg);
+fprintf(finfo,"\nI_10107=NM=Refer. RG, NM2= %f\n", refrg);
+fprintf(finfo,"\nI_10108=NM=Refer. P1, NM2= %f\n", refp1);
+fprintf(finfo,"\nI_10109=NM=Sample P1, NM2= %f\n", samplep1);
+fprintf(finfo,"\nI_10110=NM=Refer. Temp, NM2= %f\n", reftemp);
+fprintf(finfo,"\nI_10111=NM=Sample Temp, NM2= %f\n", samptemp);
+fprintf(finfo,"\nI_10112=NM=Refer. PHC0, NM2= %f\n", refphc0);
+fprintf(finfo,"\nI_10113=NM=Sample PHC0, NM2= %f\n", sampphc0);
+fprintf(finfo,"\nI_10114=NM=Refer. Scaling Factor, NM2= %f\n", refscalingfactor);
+fprintf(finfo,"\nI_10115=NM=Scans Factor, NM2= %f\n", scanfactor );
+fprintf(finfo,"\nI_10116=NM=Gain Factor, NM2= %f\n", rgfactor);
+fprintf(finfo,"\nI_10117=NM=PULCON Factor, NM2= %f\n", pulconfactor);
+fprintf(finfo,"\nI_10118=NM=Temp Factor, NM2= %f\n", tempfactor);
+fprintf(finfo,"\nI_10119=NM=Overall Scaling Factor, NM2= %f\n", scalingfactor);
+if( copyflag == 1 )
+	{
+	fprintf(finfo,"\nI_10120=NM=Reference for Conc. Calibration, NM2= saved in expno %d", copyrefexpno);
+	fprintf(finfo,"\nI_10121=NM=Artificial Peak, NM2= saved in expno %d", copypeakexpno);
+	}
+fclose(finfo);
+
+ABS
+
+//Set the added peak integral to the nominal concentration using refint
+refwidth = 0.5;
+if( strstr( nucleus, "19F" )) refwidth = 10.0; 
+//***** for TOPSPIN 2.1 or later use the following
+  sprintf(quantcmd,"%.1f %f %.1f",refshift, refwidth, nominalconc);
+  XAU("refint2", quantcmd)
+//***** for TOPSPIN 2.0 or earlier use the following
+/*  
+	sprintf(quantcmd,"refint2 %.1f %f %.1f", refshift, refwidth, nominalconc);
+  XAU(quantcmd)  
+*/
+//Now set up the layout to allow us to view the data - if required
+/*sprintf(layout,"+/as_%squant.xwp",nucleus);
+STOREPAR("LAYOUT",layout)
+sleep(1);*/
+VIEWDATA_SAMEWIN
+
+//Done
+QUITMSG("DONE")
+

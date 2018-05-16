@@ -1,0 +1,96 @@
+
+int num_slices = 20;
+int gradient = 50; //strength of gradient
+int slice_hz = 5000;
+int loop = 0;
+int temp_exp_num = 898;
+int dataset_exp = 899;
+int tmp_int;
+int choice_ok = 0;
+float offset_hz = 150000;
+float offset_inc = 1;
+float bottom_hz = 0-offset_hz;
+float tmpfloat = 0;
+char tmpstr[1024];
+/*insert user interaction here for gradient, number slices, offset and checking.*/
+
+while (choice_ok != 2) //have to get two things correct...
+{
+	choice_ok = 0;
+	GETINT("What offset in hz away from 0 to takes slices over. With 1H and a 50% gradient, 160000 covers the tube.",offset_hz);
+	if ( (offset_hz < 0) || (offset_hz > 200000) ) 
+	{
+		Proc_err(INFO_OPT, "%f is a crazy number, try again",offset_hz);
+	}
+	else {
+		choice_ok++;
+	}
+	
+	if ( (offset_hz < slice_hz)  )
+	{
+		Proc_err(INFO_OPT, "Offset needs to be more or equal to slice width - %i",slice_hz);
+	}
+	else {
+		choice_ok++;
+	}
+	
+}
+
+choice_ok = 0; //in case we want to use this method again
+bottom_hz = 0-offset_hz;
+
+while (choice_ok != 2) //have to get two things correct...
+{
+	choice_ok = 0;
+	GETINT("Number of slices on either side of zero",tmp_int);
+	tmpfloat = ((offset_hz*2)/(tmp_int*2));
+	if ( ( (tmp_int < 0) || (tmp_int > 50) ) )
+		{
+		Proc_err(INFO_OPT, "%i is a crazy number, try again",tmp_int);
+		}
+		else {
+		choice_ok++;
+		}	
+	if ( (tmpfloat < slice_hz) )
+		{
+		Proc_err(INFO_OPT, "%i gives an offset increment less than the slice width, which doesn't make sense",tmp_int);
+		Proc_err(INFO_OPT, "The slice width would be %f and needs to be more than %i", tmpfloat,slice_hz);
+		}
+		else {
+		choice_ok++;
+		}
+	
+	
+}
+choice_ok = 0; //in case we want to use this method again
+num_slices = (tmp_int *2)+1; //we want it to go through 0 really
+GETCURDATA
+RPAR("slice-select-2d","all")
+GETCURDATA
+dataset_exp=expno;
+/*setup 2d parameters*/
+STOREPARN(1,"TD", num_slices)
+/*setup temp experiment to run the slices in*/
+DATASET(name,temp_exp_num,1,disk,user) 
+VIEWDATA_SAMEWIN
+RPAR("slice-select","all")
+SETCURDATA
+XAU("wvm", "-a") //run wavemaker to set pulses
+offset_inc = (offset_hz*2)/(num_slices-1);
+offset_hz = bottom_hz; //starts with negative value, which is bottom of tube
+GETCURDATA
+
+TIMES(num_slices) //we want it to go through 0 really
+	loop++;
+	STOREPAR("SPOFFS 1",offset_hz)
+	sprintf(tmpstr,"Loop = %i Spoffs1 = %f dataset_exp = %i",loop,offset_hz,dataset_exp);
+	Proc_err(INFO_OPT,"%s",tmpstr);
+	ZG
+	WSER(loop,name,dataset_exp,1,disk,user)
+	offset_hz = offset_hz+offset_inc;
+END
+DATASET(name,dataset_exp,1,disk,user) //go back to datset called from with the written ser file in
+VIEWDATA_SAMEWIN
+QUIT
+	
+

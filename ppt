@@ -1,0 +1,5 @@
+
+GETCURDATA
+PP
+XCMD("sendgui convertpeaklist txt")
+QUIT

@@ -1,0 +1,81 @@
+/* StackPrep
+
+   writes a series of rows from a 2D dataset to 1D files
+   with procno 1000 onwards. Also generates a portfolio list
+   for use with XWINPLOT stack plot.  
+
+andrew.gibbs@bruker.co.uk
+
+991103 modify for 2.6
+020515 update for 3.1 using PORTFOLIO commands
+020516 combine with stack DOSY
+060920 pick default mode according to TD, and use two default layouts
+*/
+#define PROCOFFSET 1000
+
+int numrows;
+int increment=1;
+char string[PATH_MAX];
+char mode[PATH_MAX];
+DECLARE_PORTFOLIO
+
+GETCURDATA
+
+FETCHPAR1S("TD", &numrows)
+if (numrows <= 32) strcpy(mode, "TD");
+else strcpy(mode, "SI");
+
+GETSTRING("Number of rows = TD (xf2 data) or SI (xfb data)?", mode)
+switch(*mode)
+{
+	case 't':
+	case 'T': FETCHPAR1S("TD", &numrows)
+		  break;
+	case 's':
+	case 'S': FETCHPAR1S("SI", &numrows);
+		  increment = numrows/128;
+		  if (increment < 1) increment = 1;
+		  sprintf(string, "Row number increment (1 = all %d rows!): ", numrows);
+		  GETINT(string, increment);
+		  break;
+	default	: STOPMSG("unrecognised option - expect T or S!")
+}
+
+if (increment < 1) increment = 1;
+
+/* make first dataset to store portfolio */
+RSR(1, 1+PROCOFFSET)
+strcpy(string, curd_path(0,disk,user,name, expno, 1+PROCOFFSET, "portf.por"));
+
+CREATE_PORTFOLIO(string)
+ADD_TO_PORTFOLIO(disk, user, name, expno, 1+PROCOFFSET)
+
+/* write the rows */
+for (i1 = 1+increment; i1 <= numrows; i1+=increment)
+{
+	Proc_err(INFO_OPT, "writing row %d of %d...", i1, numrows);
+	ADD_TO_PORTFOLIO(disk, user, name, expno, i1+PROCOFFSET)
+	RSR(i1,i1+PROCOFFSET);
+}
+
+CLOSE_PORTFOLIO
+if (Proc_err(QUESTION_OPT, "Start XWINPLOT with portfolio?") == ERR_OK)
+{
+	DATASET(name, expno, 1+PROCOFFSET, disk, user)
+	switch(*mode)
+	{
+		case 't':
+		case 'T': STOREPAR("LAYOUT", "+/2D_stackTD.xwp")
+		              break;
+		case 's':
+		case 'S': STOREPAR("LAYOUT", "+/2D_stack128.xwp")
+	}
+	XWINPLOT_WITH_PORTFOLIO
+}
+else
+{
+	Proc_err(INFO_OPT, "Portfolio saved as\n%s", pf_name);
+}
+
+QUIT
+

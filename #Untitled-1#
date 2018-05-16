@@ -1,0 +1,12 @@
+/*Program to set title file to a default format*/
+/*Nuclei BF01 Pulseprogram Instrum
+int new_exp,orig_exp; 
+
+int bp=24; /*number back-predicted points*/
+int suffix=1;
+int finish=0;
+char titlefile[PATH_MAX], titletext[512], titletextnew[512];  
+char pdfname[PATH_MAX]="";
+char auproc[127]="null_proc";
+char up1[127];
+FILE *ftitle = NULL;

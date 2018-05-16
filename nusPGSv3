@@ -1,0 +1,308 @@
+/*****************************************************************/
+/*      nusPGSv3              2013.11.28 (Turkey day!)           */
+/*****************************************************************/
+/*      Short Description :   NUS Poisson Gap Sampler for        */
+/*			      Topspin 3.0+ v3.0                  */
+/*****************************************************************/
+/*      Keywords :                                               */
+/*****************************************************************/
+/*      Description/Usage :   Macro - just run nusPGSv3 and      */
+/*                            follow instructions                */
+/*****************************************************************/
+/*      Author(s) :                                              */
+/*      Name            : Scott Anthony Robson                   */
+/*      Organisation    : Harvard Medical School                 */
+/*      Email           : Scott_Robson@hms.harvard.edu           */
+/*****************************************************************/
+/*      Name            Date    Modification:                    */
+/*	SAR		131128  Added Shuffled schedule option   */
+/*      SAR             131128  Cleaning this code up            */
+/*				Macro name change to nusPGS      */
+/*      SAR             130915  Edits of code based on W Bermel  */
+/*                              nls2_setup4.be macro             */
+/*****************************************************************/
+/*
+$Id: $
+*/
+
+#define MAXDIM 8
+
+
+char infile[PATH_MAX], outfile[PATH_MAX], outfile2[PATH_MAX];
+char result[PATH_MAX];
+char input[PATH_MAX], path[PATH_MAX];
+char nuslist[PATH_MAX];
+char ct_inp[4][MAXDIM];
+char sparse[32];
+
+
+char *cp, *ep;
+
+const char* args[4];
+
+double lw[MAXDIM], j_coup[MAXDIM];
+
+float swh_a, swh[MAXDIM];
+float tolerance;
+
+int parmode, counter;
+int td[MAXDIM], td_sparse, td_max, seed, sinep, shuffle_flag, d_one, d_two, d_three;
+
+long int tval[MAXDIM];
+
+
+FILE *fpi, *fpo;
+
+
+/***** get dataset *****/
+
+GETCURDATA
+
+
+FETCHPAR("PARMODE",&parmode)
+
+if ( parmode > 3 )
+   STOPMSG("dimensionality higher than 4D currently not supported");
+
+if ( parmode == 0 )
+   STOPMSG("Directly acquired 1D spectra don't require NUS/NLS");
+
+
+/***** initialize parameters *****/
+
+for ( counter = 1; counter <= parmode  ;counter++ )
+   {
+   tval[counter] = 0;
+
+   (void)strcpy(ct_inp[counter],"n");
+
+   lw[counter] = 1.0;
+
+   j_coup[counter] = 0.0;
+   }
+
+
+/*N15 mostly CT */
+/*PGS doesn't care much about CT so this may not be needed */
+(void)strcpy(ct_inp[parmode],"y");
+
+
+(void)strcpy(sparse,"y");
+
+
+/***** get parameters *****/
+
+for ( counter = 1; counter <= parmode  ;counter++ )
+   {
+   FETCHPARN(counter, "TD", &td[counter])
+   FETCHPARN(counter, "SWH", &swh[counter])
+   }
+
+FETCHPAR("SWH",&swh_a)
+
+/** setup some defaults and initial parameters **/
+seed = 0;
+sinep = 2;
+tolerance = 0.01;
+
+/** get some user input regarding how they want to sample **/
+(void)sprintf(text, "Random seed (0 means program selected)? \n");
+GETINT(text, seed);
+(void)sprintf(text, "Sine portion for sampling? (2 is probably good) \n");
+GETINT(text, sinep);
+
+(void)sprintf(input,"nusPGS_setup");
+
+/** calc number of complex points currently requested **/
+td_max = td[1]/2;
+for ( counter = 2; counter <= parmode  ;counter++ )
+   {
+   td_max *= td[counter]/2;
+   }
+
+/** setup default sparsity at 10% **/
+td_sparse = td_max/10;
+
+/** ask what sparsity they do want **/
+for (;;)
+   {
+   (void)sprintf(text,"Number of points to collect (out of %d)? \n", td_max);
+   GETINT(text, td_sparse);
+
+   if ( td_sparse >= 0 && td_sparse <= td_max )
+      break;
+   }
+
+/** Ask about tolerance **/
+/** Potential failure here if combination of sparsity and tolerance input into poisson algorithm    **/
+/** fail to find a schedule in a timely manner. If tolerance is too low but complexity of selection **/
+/** too difficult there may need to be a timeout programmed into this macro at some stage           **/ 
+(void)sprintf(text, "Tolerance for number of sampled points (%)? \n");
+GETFLOAT(text, tolerance);
+tolerance = tolerance / 100;
+
+/** Currently the poisson program does not do shuffle output. This option should be implemented at  **/
+/** some point and can be requested at tis point. Stay tuned for version 3.0                        **/
+/** OK adding shuffle option now                                                                    **/
+shuffle_flag = 0;
+(void)sprintf(text, "Shuffle the schedule? (0 = no, 1 = yes)\n");
+GETINT(text, shuffle_flag);
+
+
+/** check and execute poisson **/
+
+(void)sprintf(path,"%s/bin/poissonv3", PathXWinNMRProg() );
+
+if (access(path, F_OK))
+   {
+   (void)sprintf(text, "file %s does not exist", path);
+   STOPMSG(text);
+   }
+
+
+(void)strcpy(path, ACQUPATH(""));
+
+(void)chdir(path);
+
+
+(void)sprintf(result,"%s.out", ACQUPATH(input) );
+
+
+(void)sprintf(path,"%s/bin/poissonv3", PathXWinNMRProg() );
+
+/** Need to reverse some orders of the dimensions here. Not sure this is necessary but is a  **/
+/** kluge that works. Also guarantees that non-existant dimensions are given a 0 value which **/
+/** the poisson executable requires for sanity check.                                        **/
+
+if ( parmode ==3 ) {
+	d_one = td[3]/2;
+	d_two = td[2]/2;
+	d_three = td[1]/2;
+}
+
+if (parmode == 2 ) {
+	d_one = td[2]/2;
+	d_two = td[1]/2;
+	d_three = 0;
+}
+
+if ( parmode == 1 ) {
+	d_one = td[1]/2;
+	d_two = 0;
+	d_three = 0;
+}
+
+/** Yallah Balla! **/
+(void)sprintf(text, "%s %i %i %i %i %f %i %i %i %i > %s", path, parmode, seed, sinep, td_sparse, tolerance, d_one, d_two, d_three, shuffle_flag, result);
+(void)system(text);
+
+
+
+/** check result of poisson **/
+(void)sprintf(infile,"%s.out", ACQUPATH(input) );
+
+
+fpi = fopen(infile,"rt");
+
+if ( fpi == NULL )
+   {
+   (void)sprintf(text,"cannot open input file:\n%s",infile);
+   STOPMSG(text);
+   }
+
+/** check output files **/
+
+(void)sprintf(nuslist,"nuslist_%d", expno);
+
+(void)sprintf(outfile,"%s/stan/nmr/lists/vc/%s", PathXWinNMRExp(), nuslist);
+
+fpo = fopen(outfile,"wt");
+
+if ( fpo == NULL )
+   {
+   (void)sprintf(text,"cannot open output file:\n%s",outfile);
+   }
+
+
+/***** split points file *****/
+
+while( fgets(text, sizeof(text), fpi) != NULL )
+   {
+   cp = text;
+
+   while( isspace(*cp) )
+      {
+      cp++;
+      }
+
+   if ( *cp )
+      {
+      tval[1] = strtol(cp, &ep, 10);
+
+      if ( cp == ep )
+         {
+         (void)sprintf(path,"inconsistent file content for input file (first entry):\n%s",infile);
+         STOPMSG(path);
+         }
+
+
+      if ( parmode >= 2 )
+         {
+         cp = ep;
+
+         tval[2] = strtol(cp, &ep, 10);
+
+         if ( cp == ep )
+            {
+            (void)sprintf(path,"inconsistent file content for input file (second entry):\n%s",infile);
+            STOPMSG(path);
+            }
+	 }
+
+      if ( parmode >= 3 )
+         {
+         cp = ep;
+
+         tval[3] = strtol(cp, &ep, 10);
+
+         if ( cp == ep )
+            {
+            (void)sprintf(path,"inconsistent file content for input file (third entry):\n%s",infile);
+            STOPMSG(path);
+            }
+	 }
+
+
+      (void)fprintf(fpo,"%ld\t", tval[1]);
+
+      if ( parmode >= 2 )
+         (void)fprintf(fpo,"%ld\t", tval[2]);
+
+      if ( parmode >= 3 )
+         (void)fprintf(fpo,"%ld\t", tval[3]);
+
+      (void)fprintf(fpo,"\n");
+
+      }
+   }
+
+
+(void)fclose(fpi);
+(void)fclose(fpo);
+
+
+/***** store parameters *****/
+
+STOREPAR("NUSLIST", nuslist)
+
+
+STOREPAR("L 3", td_sparse*2 );
+
+if ( parmode >= 2 )
+   STOREPAR("L 13", 2 );
+
+if ( parmode >= 3 )
+   STOREPAR("L 23", 2 );
+
+
+QUITMSG("Poisson gap sampling schedule setup finished")

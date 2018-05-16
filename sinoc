@@ -1,0 +1,286 @@
+/*** ^^A -*-C++-*- **********************************************/
+/*	sinocal		24.05.2000				*/
+/****************************************************************/
+/*	Short Description :					*/
+/*	This program calculates the signal to noise ratio.	*/
+/****************************************************************/
+/*	Keywords :						*/
+/*	sino, SINO, signal to noise				*/
+/****************************************************************/
+/*	Description/Usage :					*/
+/*	This program calculates the signal to noise ratio in	*/
+/*	noofinc different intervals. The signal height is	*/
+/*	calculated between SIGF1 and SIGF2, the noise is	*/
+/*	calculated between NOISF1 and NOISF2. The values for	*/
+/*	SIGF1, SIGF2, NOISF1 and NOISF2 as well as the interval	*/
+/*	width are read from the file :				*/
+/*	/.../prog/tcl/libticx/ntplib/Lists/Ref_Specs_List.	*/
+/*	These values are experiment dependant. The type of	*/
+/*	experiment is given with the data set name. If the type	*/
+/*	of experiment cannot be	deducted form the data set	*/
+/*	name, the user is prompted for the required limits	*/
+/*	(see above). The result is written to the file		*/
+/*	'sinocal.out' in the processed data directory. The	*/
+/*	best 'sino' value is also displayed in foreground.	*/
+/****************************************************************/
+/*	Author(s) :						*/
+/*	Name		: Mike Engelhardt			*/
+/*	Organisation	: Bruker Analytik			*/
+/*	Email		: michael.engelhardt@bruker.de		*/
+/****************************************************************/
+/*	Name		Date	Modification:			*/
+/*	eng		970609	created				*/
+/*	eng		000524	lc experiments included		*/
+/****************************************************************/
+/*
+$Id: sinocal,v 1.12 2001/03/16 13:31:01 eng Exp $
+*/
+
+local_au (curdat, cmd);
+
+QUIT
+
+#undef TM
+#undef tm
+#undef II
+#undef ii
+
+#include <sys/types.h>	/* for RD_ONLY etc. */
+#include <sys/stat.h>	/* for RD_ONLY etc. */
+#include <fcntl.h>	/* for RD_ONLY etc. */
+
+#define noofinc 25
+
+local_au (curdat, cmd)
+char *curdat;
+char *cmd;
+{
+char pppath[PATH_MAX], line[PATH_MAX], deftype[PATH_MAX], exptype[5];
+char namebuffer[PATH_MAX], *answer;
+double sf;
+float signf1, signf2, noif1, noif2, noiinc, noistep, noif1or, noif2or;
+float sinores[noofinc][3], sino200[noofinc][3];
+FILE *fptr1;
+int ret, ii, found, doittwice, do200hz, compar();
+
+GETCURDATA
+
+XCMD("status all");
+XCMD("setdef ackn no");
+
+found = 0;
+doittwice = do200hz = 0;
+exptype[0] = '\0';
+signf1 = 4.0;
+signf2 = 3.5;
+noif1 = 15;
+noif2 = 10;
+noiinc = 1.0;
+
+/* Use last four characters of data set name as experiment type */
+
+if ( strlen(name) > 3 )
+  (void) strcpy (exptype,name+(strlen(name)-4));
+else
+  (void) strcpy (exptype,name);
+
+/* read limits from file Ref_Specs_List */
+
+(void) sprintf (pppath,"%s/tcl/libtix/ntplib/Lists/Ref_Specs_List",
+					PathXWinNMRProg());
+if ( (fptr1 = fopen (pppath,"r")) == NULL )
+{
+  Proc_err (DEF_ERR_OPT,"Could not open sino definition file.\n\
+%s\nPlease check experiment setup later.",pppath);
+  return (-1);
+}
+
+while ( fgets (line,PATH_MAX-1,fptr1) != NULL )
+{
+  sscanf (line,"%s %f %f %f %f %f",
+		deftype,&signf1,&signf2,&noif1,&noif2,&noiinc);
+  if ( (strlen(exptype) >= strlen(deftype)) &&
+       !strcmp(deftype,exptype+(strlen(exptype)-strlen(deftype))) ) 
+  {
+    found = 1;
+    if ( !strncmp(exptype+(strlen(exptype)-strlen(deftype)),"snh",3) )
+      doittwice = 1;
+    if ( !strncmp(exptype+(strlen(exptype)-strlen(deftype)),"snhl",4) )
+    {
+      do200hz = 1;
+      doittwice = 0;
+    }
+    if ( !strncmp(exptype+(strlen(exptype)-strlen(deftype)),"ptl",3) )
+      do200hz = 1;
+    break;
+  }
+}
+(void) fclose (fptr1);
+
+if ( !found )
+{
+  /* Check for values in argument list */
+  /* (sinocal called from user GlpDetermineSpecs()) */
+
+  ret = sscanf(cmd,"%f %f %f %f %f",
+				&signf1,&signf2,&noif1,&noif2,&noiinc);
+  if ( ret != 5 )
+  {
+
+signf1 = 4.0;
+signf2 = 3.5;
+noif1 = 15;
+noif2 = 10;
+noiinc = 1.0;
+
+
+  }
+}
+
+/* Plausibility check : */
+
+if ( noiinc > (noif1-noif2) )
+{
+  Proc_err (DEF_ERR_OPT,"Noise width is bigger than\n\
+the noise region.\nPlease correct the width or\nthe noise limits.");
+  ABORT
+}
+noif1or = noif1;
+noif2or = noif2;
+STOREPAR("SIGF1",signf1)
+STOREPAR("SIGF2",signf2)
+
+if ( !do200hz )
+{
+  /* Determine sino in noofinc intervals of noiinc length */
+
+  noistep = (noif1-noif2-noiinc)/(noofinc-1);
+  noif2 = noif1-noiinc;
+  for ( ii = 0; ii < noofinc; ii++ )
+  {
+    STOREPAR("NOISF1",noif1)
+    STOREPAR("NOISF2",noif2)
+    XCMD("sino real")
+    FETCHPARS("SINO",&sinores[ii][0])
+    sinores[ii][1] = noif1;
+    sinores[ii][2] = noif2;
+    noif1-=noistep;
+    noif2-=noistep;
+  }
+
+  /* Sort sino values in descending order (best sino first, */
+  /* worst sino last) and then write them to result file.   */
+
+  qsort(sinores,(unsigned)noofinc,3*sizeof(float),compar);
+
+  /* sinocal.out is path to ASCII file for results - open it */
+
+  (void) sprintf (pppath,"%s/data/%s/nmr/%s/%d/pdata/%d/sinocal.out",
+				disk, user, name, expno, procno);
+  errno = 0;
+  if ( (fptr1 = fopen (pppath,"wt")) == NULL )
+  {
+    Perror(DEF_ERR_OPT,pppath);
+    ABORT
+  }
+  for ( ii = 0; ii < noofinc; ii++ )
+    (void) fprintf (fptr1,"%8.1f  %8.2f  %8.2f\n",
+			sinores[ii][0],sinores[ii][1],sinores[ii][2]);
+  (void) fclose (fptr1);
+}
+
+if ( doittwice || do200hz )
+{
+
+  /* for 1H, we do the sino test twice :			*/
+  /* 1) with a noise interval of 2 ppm (already done above !)	*/
+  /* 2) with a noise interval of 200 Hz (that's what we do now)	*/
+
+  FETCHPARS("SF",&sf)
+  noif1 = noif1or; /* reset to original values */
+  noif2 = noif2or; /* reset to original values */
+  noiinc=200.0/sf; /* set to 200 Hz increment */
+
+  /* Determine sino in noofinc intervals of noiinc length */
+
+  noistep = (noif1-noif2-noiinc)/(noofinc-1);
+  noif2 = noif1-noiinc;
+  for ( ii = 0; ii < noofinc; ii++ )
+  {
+    STOREPAR("NOISF1",noif1)
+    STOREPAR("NOISF2",noif2)
+    XCMD("sino real")
+    FETCHPARS("SINO",&sino200[ii][0])
+    sino200[ii][1] = noif1;
+    sino200[ii][2] = noif2;
+    noif1-=noistep;
+    noif2-=noistep;
+  }
+
+  /* Sort sino values in descending order (best sino first, */
+  /* worst sino last) and then write them to result file.   */
+
+  qsort(sino200,(unsigned)noofinc,3*sizeof(float),compar);
+
+  /* sino200.out is path to ASCII file for results - open it */
+
+  (void) sprintf (pppath,"%s/data/%s/nmr/%s/%d/pdata/%d/sino200.out",
+				disk, user, name, expno, procno);
+  errno = 0;
+  if ( (fptr1 = fopen (pppath,"wt")) == NULL )
+  {
+    Perror(DEF_ERR_OPT,pppath);
+    ABORT
+  }
+ for ( ii = 0; ii < noofinc; ii++ )
+   (void) fprintf (fptr1,"%8.1f  %8.2f  %8.2f\n",
+			sino200[ii][0],sino200[ii][1],sino200[ii][2]);
+  (void) fclose (fptr1);
+}
+
+if ( doittwice )
+{
+  Proc_err (DEF_ERR_OPT,"Best sino value: %8.1f\n\
+Signal from %8.2f to %8.2f ppm\nNoise  from %8.2f to %8.2f ppm\n\
+Sino value 200 Hz test : %8.1f\nNoise  from %8.2f to %8.2f ppm",
+	sinores[0][0],signf1,signf2,sinores[0][1],sinores[0][2],
+	sino200[0][0],sino200[0][1],sino200[0][2]);
+  STOREPAR("NOISF1",sino200[0][1])
+  STOREPAR("NOISF2",sino200[0][2])
+}
+else if ( do200hz )
+{
+  Proc_err (DEF_ERR_OPT,"Best sino value (200 Hz test): %8.1f\n\
+Signal from %8.2f to %8.2f ppm\nNoise  from %8.2f to %8.2f ppm",
+	sino200[0][0],signf1,signf2,sino200[0][1],sino200[0][2]);
+  STOREPAR("NOISF1",sino200[0][1])
+  STOREPAR("NOISF2",sino200[0][2])
+}
+else
+{
+  Proc_err (DEF_ERR_OPT,"Best sino value: %8.1f\n\
+Signal from %8.2f to %8.2f ppm\nNoise  from %8.2f to %8.2f ppm",
+	sinores[0][0],signf1,signf2,sinores[0][1],sinores[0][2]);
+  STOREPAR("NOISF1",sinores[0][1])
+  STOREPAR("NOISF2",sinores[0][2])
+}
+STOREPAR("SIGF1",signf1)
+STOREPAR("SIGF2",signf2)
+
+}
+
+/***************** compar compares two double vaules *****************/
+int compar(s1,s2)
+char *s1, *s2;
+{
+  /* return the opposite of the comparison result - */
+  /* that sorts the sino values in descending order */
+
+  float retval;
+  if ( (retval = *(float*)s1 - *(float*)s2) > 0.0 )
+    return (-1);
+  else if ( retval < 0.0 )
+    return (1);
+  else
+    return (0);
+}

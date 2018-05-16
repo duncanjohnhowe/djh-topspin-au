@@ -1,0 +1,72 @@
+
+int new_exp;
+char titlefile[PATH_MAX], titletext[512], titletextnew[512];  
+char pdfname[512]="d:/disk2/data/service/pdf/";
+FILE *ftitle = NULL;
+
+GETCURDATA
+
+
+/*convert the data into exp+6000, and backwards predict the first 16 points*/
+/*
+VIEWDATA_SAMEWIN
+new_exp=expno+6000;
+CONVDTA(new_exp)
+expno=new_exp;
+VIEWDATA_SAMEWIN
+STOREPAR("TDOFF",16);
+XCMD("me_mod LPbr");
+STOREPAR("NCOEF", 1024);
+XCMD("phc0 0")
+XCMD("phc1 0 ")
+*/
+
+
+sprintf( titlefile, "%s/data/%s/nmr/%s/%i/pdata/1/title", disk, user, name, new_exp);
+/*sprintf( titletextnew, "Data has been converted to analogue. Backwards predicted 16 points to remove cryoprobe baseline roll." );*/
+sprintf(titletextnew, "\n%s\n", name);
+ftitle = fopen( titlefile, "a");
+fputs( titletextnew, ftitle); 
+fclose( ftitle);
+
+
+/*set sr value to solvent*/
+
+XCMD("13cref");
+
+
+/*do a bit of processing to check the result*/
+EFP
+STOREPAR("F1P", 250.0);
+STOREPAR("F2P", -10.0);
+STOREPAR("MI", 0.5);
+STOREPAR("PC", 1.2);
+STOREPAR("CY",200);
+STOREPAR("MAXI", 2000.0);
+PP
+XAU("as_phase1d",cmd);
+STOREPAR("CY",200);
+STOREPAR("MAXI", 2000.0);
+STOREPAR("MI", 1.0);
+STOREPAR("PC", 2.0);
+PP
+XAU("djh_cycalc13c",cmd);
+STOREPAR("F1P", 250.0);
+STOREPAR("F2P", -10.0);
+STOREPAR("MI", 1.0);
+STOREPAR("PC", 2.0);
+
+ABS
+APK
+PP
+STOREPAR("CY", 11.0);
+/*XCMD("nm");*/
+STOREPAR("layout","+/dept.xwp");
+sprintf( pdfname, "%s%s/%s/%d/pdata/%d/%s-dept.pdf", disk, user, name, expno, procno, name );
+AUTOPLOT_TO_FILE(pdfname);
+/*sleep(2);*/
+sprintf( pdfname, "c:/nmr-pdf/%s-dept.pdf", name );
+AUTOPLOT_TO_FILE(pdfname);
+/*sleep(2);*/
+
+QUIT

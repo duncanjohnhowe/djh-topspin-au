@@ -1,0 +1,76 @@
+/* Au program to process 3D data for SAPPHIRE ((averages the pure shift spectra acquired with differente J-evolution times))
+
+
+Developed By NMR Methodology Group
+School of Chemistry, University of Manchester
+United Kingdom
+
+This au program will ask the following:
+
+	1) NAME: The name of the folder that you are in.
+	2) EXPNO: The experiment number of the pseudo 2D experiment that containts the pure shift spectra acquired with differente J-evolution times.
+	3) PROCNO: Should be 1
+	4) DISK: The directory in which the data are saved
+	5) Repeat dialog (r) or continue (c): Should be answered with c
+	6) Enter new expno for 1D pure shift data: Should be the new experiment number that the final spectrum will be saved. 
+	 
+*/
+
+			
+		int si1,si2,ns,nexpno,totscans,pexpno=9998,scans,expno_save;
+		char infile[PATH_MAX],statustext[256];
+		
+#include <inc/getdataset>
+		
+		FETCHPAR1S("TD",&si1)	
+		FETCHPAR("TD",&si2)
+		FETCHPAR("NS", &ns)  
+		STOREPAR1("SI",2*si1)
+		STOREPAR("SI",2*si2)
+	
+		totscans=ns*si1;
+																	
+		i1=0;
+		TIMES(si1)	
+		i1 ++;
+		RSER(i1,i1+(pexpno-1),1)
+		END
+ 
+ 	  strcpy(infile, ACQUPATH("ser"));
+	  GETINT("Enter new expno for 1D pure shift data:  ",nexpno) 
+ 		expno_save=nexpno;
+ 		
+ 		    
+		REXPNO(pexpno) 
+	  SETCURDATA
+ 		WRA(expno_save)
+ 		
+ 						
+ 	  DATASET(name,expno_save,procno,disk, user)
+    DATASET2(name,expno_save,procno,disk, user)
+    STOREPAR("DC", 1.0)
+    STOREPAR("TI", "result of fidadd")
+    STOREPARS("TI", "result of fidadd")
+ 																																					
+    TIMES(si1-1)
+    SETCURDATA
+    DATASET3(name,++pexpno, procno, disk, user)
+    ADDFID
+    ERRORABORT
+    END 
+      
+
+		VIEWDATA
+	 	
+	 	
+		SETCURDATA
+    STOREPAR("NS",totscans)
+    
+	for(i2=1; i2<=si1; i2++)
+		{ 													
+		DELETEEXPNO(name,(pexpno+1)-i2,disk,user)	
+		}
+   
+   	
+		
+   QUIT

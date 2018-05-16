@@ -1,0 +1,171 @@
+/*made by GSK originally, HIGHLY modded by DJH at Cambridge UNI*/
+/*source tree is now completely divergent....*/
+/*does default processing of dataset*/
+/*this is planned to be used as the only way janus processes data*/
+/*it can be called from janus_sx, if janus is not in mode 1*/
+/*it can be called from janus_reproc otherwise*/
+/*janus reproc may get requests to print.*/
+
+/*what it does is dependent on mode janus is in*/
+
+#include <stdio.h>
+#include <inc/sysutil>
+char defaultsfile[256]="f:/chemist/defaults-csv.txt";
+char homepul[40], pul[40], directory[40], data_File[80], nuc1[20], nuc2[20],au_p[64];
+char plot_or_pdf[100];
+char pdfname[2048]="null";
+char pornotfile[255]="null";
+char in_data[1024]="";
+char prefix[40],diskunit[40],suser[40],tunefile[40];
+char archpath[80],archive[20],gradshim[20],shimset[40];
+char janus_replot[80]; //will be the contents of userp3, wheter we plot or not
+char *field,file_data;
+int mode, dexpno, expno, i_limit, Hexpno, Cexpno;
+int proc_or_not;
+float Hsr, Csr;
+FILE *pornot=NULL, *fdef=NULL;
+
+int get_proc_or_not_val(FILE *pornot);
+
+Hexpno=0;
+Cexpno=0;
+expno=1;
+Hsr=0.0;
+Csr=0.0;
+
+GETCURDATA
+dexpno = expno;
+
+/*now read defaults file to set some variables*/
+FETCHPAR("USERP3",&janus_replot);
+fdef = fopen( defaultsfile, "r" );
+rewind(fdef); //go to begining of file
+file_data = fgets(in_data, 1024, fdef); //read in file as a continuous string
+fclose(fdef); //close the file
+//file is open, read data
+field = strtok(in_data, ",");
+strcpy( prefix,field);
+Proc_err(INFO_OPT,"prefix is %s",prefix);
+field = strtok(NULL, ",");
+sscanf(field, "%s", &diskunit);
+	Proc_err(INFO_OPT,"diskunit is %s",diskunit);
+field = strtok(NULL, ",");
+sscanf(field,"%s", &suser);
+	Proc_err(INFO_OPT,"suser is %s",suser);
+field = strtok(NULL,",");
+sscanf(field,"%s",&tunefile);
+	Proc_err(INFO_OPT,"tunefile is %s", tunefile);
+field = strtok(NULL,",");
+sscanf(field,"%s",&shimset);
+	Proc_err(INFO_OPT,"shimset is %s", shimset);
+field = strtok(NULL,",");
+sscanf(field,"%s",&archpath);
+	Proc_err(INFO_OPT,"archpath is %s", archpath);
+field = strtok(NULL,",");
+sscanf(field,"%s",&archive);
+	Proc_err(INFO_OPT,"archive is %s", archive);
+field = strtok(NULL,",");
+sscanf(field,"%s",&gradshim);
+	Proc_err(INFO_OPT,"gradshim is %s", gradshim);
+Proc_err(INFO_OPT,"parsed defaults file");
+
+sprintf(pornotfile, "%s%s\\proc_or_not.txt", diskunit,suser);
+
+//CHECK do we need homepul?
+FETCHPAR("PULPROG", &homepul);
+
+sprintf(directory, "%s%s/%s", disk, user, name);
+
+Proc_err(INFO_OPT,"%s",directory);
+
+	sprintf( data_File, "%s%s/%s/%d/pulseprogram", disk, user, name, expno );
+	
+	if( access( data_File, R_OK ) == 0 )
+	 {
+	 	 DATASET(name, expno, procno, disk, user)
+	 	 FETCHPAR("PULPROG", &pul)
+	 	 FETCHPAR("NUC1",nuc1)
+	 	 FETCHPAR("NUC2",nuc2)
+	 	 FETCHPAR("USERP3", &plot_or_pdf);
+	 	 if  ((strstr(pul, "zg30" ) || (strstr(pul, "noesypr1d"))) && (!strcmp(nuc1,"1H")))
+	 	 {
+	 	 	  sprintf(au_p,"janus-1h-proc");
+	 	 	  STOREPAR("AUNMP", au_p);
+	 	 	  XCMD("xaup");
+	 	 	 goto next;
+	 	 }
+		 if ((strstr(pul, "zgpg30") || (strstr(pul, "zgdc30"))) && (!strcmp(nuc1,"13C")))
+		 {
+			 sprintf(au_p,"service-13c-proc");
+			 STOREPAR("AUNMP", au_p)
+			 XAU("service-13c-proc",cmd);
+		 }
+		 if ((strstr(pul, "dept")) || (strstr(pul, "apt")) || (strstr(pul, "jmod")))
+		 {
+			 sprintf(au_p,"service-dept-proc");
+			 STOREPAR("AUNMP", au_p)
+			 XAU("service-dept-proc",cmd);
+		 }
+		 if ((strstr(pul, "cosygpmfqf")) || (strstr (pul, "cosygpmf.pg")) || (strstr (pul,"cosygpppqf")))
+		 {
+			 sprintf(au_p,"service-cosy-proc");
+			 STOREPAR("AUNMP", au_p);
+			 XAU("service-cosy-proc",cmd);
+		 }
+		 if ((strstr(pul, "hsqc")) || (strstr (pul, "hmqc")))
+		 {
+			 sprintf(au_p,"service-hsqc-ed-proc");
+			 STOREPAR("AUNMP", au_p);
+			 XAU("service-hsqc-ed-proc",cmd)
+		 }
+		 if ((strstr(pul, "hmbc")) || (strstr (pul, "impact")))
+		 {
+			 sprintf(au_p,"service-hmbc-proc");
+			 STOREPAR("AUNMP", au_p)
+			 XAU("service-hmbc-proc",cmd)
+		 }
+		 if ((strstr(pul, "roesy")) || (strstr(pul, "noesy")) || (strstr(pul, "mlevph")))
+		 {
+			 sprintf(au_p,"service-noesy-proc");
+			 STOREPAR("AUNMP", au_p)
+			 XAU("service-noesy-proc",cmd)
+		 }
+		// else {Proc_err(INFO_OPT"%s - not matched to a known processing method")};
+	 }
+ next:
+
+//make it pdf and maybe print here
+
+sprintf(pdfname, "%s%s/%s/%d/pdata/%d/%s-%s-%s.pdf", disk, user, name, expno, procno, name,nuc1,pul );
+AUTOPLOT_TO_FILE(pdfname);
+
+pornot = fopen (pornotfile,"r");
+proc_or_not=get_proc_or_not_val(pornot);
+fclose(pornot);
+
+if ( (proc_or_not==2) || (proc_or_not==3) || (strstr(janus_replot, "plot")) )
+{			
+		AUTOPLOT;
+}
+
+
+QUIT
+
+
+int get_proc_or_not_val(FILE *pornot)
+{
+	int i;
+	if (pornot == NULL)
+	{
+		Proc_err(INFO_OPT, "Can't open the file to get the processing options, defaulting to aquisisistion only mode");
+		fclose(pornot);
+		return 1;
+	} else
+	{		
+		fscanf(pornot,"%d",&i);
+		fclose(pornot);
+		return i;
+	}
+	return 1;
+}
+

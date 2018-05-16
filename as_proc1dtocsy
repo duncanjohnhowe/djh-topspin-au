@@ -1,0 +1,25 @@
+/* ========================================================================== */
+/*
+title:	as_proc1dtocsy
+author:	Sean Lynn
+description:	autoprocesses selrogp experiments
+/*
+/* ========================================================================== */
+
+int cur_expno;
+float Hsr;
+
+GETCURDATA
+
+ //process data
+ cur_expno = expno;
+ DATASET(name,10,1,disk,user)
+ FETCHPAR("SR", &Hsr)
+ DATASET(name,cur_expno,1,disk,user)
+ STOREPAR("SR",Hsr)
+ EFP
+ APKS
+ STOREPAR("CY",10.0)
+ DATASET2(name,10,1,disk,user)
+
+QUIT

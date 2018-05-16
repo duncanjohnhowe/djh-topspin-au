@@ -1,0 +1,167 @@
+/*****************************************/
+/*The default way this is supposed to work is to send an email under automation, at a defined point in the experiment run
+/*i.e. after the dept, but before the cosy...
+/* the way it works is as follows :-
+/* USERP5 contains the processing au program to be used
+/* USERP1 contains the email address  to send it to
+/* AUNMP is set to be p3-pdf-email
+/* In IconNmr at the point you wish to send the email, type in the email to USERP1
+/* The first thing the Au program will do is run the processing defined in UserP5
+/* then it will check for an @ symbol in USERP1, if it finds one it will try and zip the data
+/* (minus the processed data), scan for a pdf in any experiment, and send the first one it finds,
+/* along with the zip file created to the defined email. 
+/* A 'the works' data set is about 11MB zipped.
+/*
+/* When running outside of Iconnmr, it will email the whole data set.
+/* If you don't want it to reprocess the experiment its run from, set USERP5 to null_proc
+/*MODDED TO ONLY EMAIL ACCORDING TO USERP1
+*/
+
+#include <stdio.h>
+#include <inc/sysutil>
+#include <dos.h>
+
+
+
+/*the directory to output pdfs to.*/
+char pdfdir[127]="e:/pdf/",pdfname[511]="e:/pdf/";
+char samplename[255], directory[255],snamepath[255]="e:",data_File[127];
+char orig_au[255],proc_au[255];
+char id[127]="camnmrservice@gmail.com", password[127]="pgamdjh2012";
+char email[255],title[255],message[255],body[255]="DO NOT REPLY";
+char archroot[255] = "e:\\zips"; 
+char emailedlist[256] = "e:/emailed-list/emailed-list.txt";
+char batfile[127]="e:\\top-copy.bat",batcmd[127]="e:/top-copy.bat";
+char subdir[255], archpath[511], cmd_str[2048]="\n";
+char status1[127]="emailing",status2[127]="done"; 
+char status_string[127]="working";
+char temp_str[2048]="";
+int cmdstatus,orig_expno,i_limit,i_exp=1,pdfthere=0,i;
+FILE *fbat = NULL;
+FILE *sname = NULL;
+FILE *statusprint = NULL;
+
+/*this should stop you having to click ok to go onwards...*/
+XCMD("setdef ackn no")
+XCMD("setdef stderr off")
+XCMD("setdef stdout off")
+/*first thing to do is process the data in the directory we're in*/
+GETCURDATA
+
+/* don't need any of this, as we're just emailing
+FETCHPAR("AUNMP", &orig_au);
+FETCHPAR("USERP5", &proc_au);
+STOREPAR("AUNMP", proc_au) ;
+//CPR_exec(proc_au, WAIT_TERM); //the processing may be time consuming...better wait for it to finish
+//XAUP("proc_au",cmd);
+STOREPAR("AUNMP",orig_au);
+*/
+
+FETCHPAR("USERP1",email)
+/*email[strlen(email)-1]=NULL;*/ //if needed; to strip last char from string
+STOREPAR("USERP3", status1)
+if (strchr(email,'@') == NULL)
+{
+	Proc_err(INFO_OPT, "No email address found");
+	ABORT
+}
+
+sprintf( pdfname, "%s%s/%s/%d/pdata/%d/%s.pdf", disk, user, name, expno, procno,name );
+/*start making zip file*/
+//make path to correct archive directory
+strcpy ( subdir, name);
+sprintf( archpath, "%s\\%s",archroot,subdir);
+/*****************************************************/
+/*SET BELOW TO CORRECT DATA DIR*/
+/**************************************************/
+/*make up a batfile with commands to zip up the data, then run the batch file*/
+//sprintf( cmd_str, "robocopy  e:\\data\\nmrservice\\nmr\\%s /S %s",name,archpath); 
+sprintf(temp_str, "%s%s/%s",disk,user,name);
+/*reformat the command for dos*/
+for( i=0; i < strlen(temp_str); i++)
+{
+	if(temp_str[i]=='/')
+		{ 
+			temp_str[i]= '\\';
+		}		
+}
+
+//sprintf( cmd_str, "robocopy  e:\\data\\nmrservice\\nmr\\%s /S %s",name,archpath);
+/*add the archive path onto the robocopy command*/
+sprintf (cmd_str, "robocopy %s /S %s", temp_str,archpath);
+/*write to the dos batch file*/
+fbat = fopen(batfile, "w");
+fputs( cmd_str, fbat);
+Show_status(cmd_str);
+fclose( fbat);
+
+sprintf(cmd_str,"\r\n");
+fbat = fopen(batfile, "a");
+fputs( cmd_str, fbat);
+fclose( fbat);
+/*add a zip command to the batch file*/
+sprintf( cmd_str,"zip -r -9 %s.zip %s -x \*1r \*1i \*2ii \*2ir \*2ri \*2rr", archpath ,archpath);
+fbat = fopen(batfile, "a");
+fputs( cmd_str, fbat);
+fclose( fbat);
+Show_status(cmd_str);
+
+/*now run the batch command to copy and zip*/
+system(batcmd);
+
+/*FINISHED MAKING ZIP FILE*/
+
+/*now get first pdf of dataset*/
+/*better check there is data there, or we'll infinite loop*/
+(void) sprintf(directory, "%s%s/%s", disk, user, name);
+i_limit = gethighest(directory);
+if (i_limit>999) i_limit=999;
+while (i_exp < i_limit)
+{
+	/*the pdf file created by pdfit has -n.pdf at the end of the filename*/
+	sprintf( pdfname, "%s%s/%s/%d/pdata/%d/%s-1.pdf", disk, user, name, i_exp, procno,name );	 
+	if( access( pdfname, R_OK ) == 0 ) // if there is a pdf there
+		{															
+	  pdfthere=1;
+	//	Proc_err(INFO_OPT,"%s - %i",pdfname,pdfthere);	
+		break;
+		}
+	i_exp++;
+}
+	
+/*Now email the zip, and the pdf if there is one.*/
+/*first create the sendemail command we're going to run*/
+if (pdfthere==1) { 
+	sprintf (cmd_str, "sendemail -f %s -t %s -u %s -m %s -a  %s.zip %s -s smtp.gmail.com:587 -o tls=yes -xu %s -xp %s", id, email,name, body, archpath, pdfname, id, password);
+}
+else	{
+	sprintf (cmd_str, "sendemail -f %s -t %s -u %s -m %s -a %s.zip -s smtp.gmail.com:587 -o tls=yes -xu %s -xp %s", id, email,name, body, archpath, id, password);
+}
+
+/*write a dos batch file with the cmd_str and run it*/
+fbat = fopen(batfile, "w");
+fputs( cmd_str, fbat);
+fclose( fbat);
+Show_status(cmd_str);
+
+/*send the email*/
+system(batcmd);
+
+/*append the email address sent to and filename to a statusfile*/
+statusprint = fopen(emailedlist, "a");
+static const char *CurrentTime(void)
+{
+    time_t clock;
+    (void) time(&clock);
+    return ctime(&clock);
+}
+sprintf(status_string, "%s,%s,%s\r\n", email,name,CurrentTime());
+fputs( status_string, statusprint);
+fclose(statusprint);
+
+
+XCMD("setdef ackn ok")
+XCMD("setdef stderr on")
+XCMD("setdef stdout on")
+
+QUIT

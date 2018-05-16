@@ -1,0 +1,24 @@
+char pdf_Name[PATH_MAX] = "";
+char szFileStatus[20] = "";
+char szTypeOfData[20] = "";
+char cmdstr[200] = "";
+char procnoPath[PATH_MAX] = "";
+char pdfname[PATH_MAX]="c:/nmr-pdf/";
+float baselev=128.0;
+GETCURDATA
+
+XCMD("serv_projref")
+STOREPAR("lev0", baselev)
+XFB
+ABS1
+ABS2
+XAU("clev",cmd);
+STOREPAR("layout", "+/cosy.xwp")
+
+sprintf( pdfname, "%s%s/%s/%d/pdata/%d/%s-cosy.pdf", disk, user, name, expno, procno, name );
+AUTOPLOT_TO_FILE(pdfname);
+/*sleep(2);*/
+sprintf( pdfname, "c:/nmr-pdf/%s-cosy.pdf", name );
+AUTOPLOT_TO_FILE(pdfname);
+/*sleep(2);*/
+QUIT

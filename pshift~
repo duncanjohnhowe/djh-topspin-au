@@ -1,0 +1,275 @@
+/*** ^^A -*-C++-*- ******************************************************/
+/*  pshift         09 June 2011                                         */
+/************************************************************************/
+/*  Short Description :                                                 */
+/*  AU program to reconstruct Zangger-Sterk based                       */
+/*  2D Pureshift and 3D Pureshift data                                  */
+/************************************************************************/
+/*  Keywords :                                                   		*/
+/*  pureshift, Zangger-Sterk, DOSY                               		*/
+/************************************************************************/
+/*  Description/Usage :                                           		*/
+/* 	This AU program reconstructs 2D or 3D Pureshift (aqseq 312)	        */
+/*	data recorded with Zangger-Sterk based pulse sequences.   			*/
+/*	Depending on the dimensionality, either 2D or 3D processing is		*/
+/*	employed. First, data is converted to analog form into temporary	*/
+/*	expno 9999. Further, the user is promted to enter an unused expno for*/
+/*	the output data (default is expno+1). A template for the output 	*/
+/*	data is then generated using the macros RSER (for 2D) and 			*/
+/*	RSER2D (for 3D), respectively. Consequently, the data is read in	*/
+/*	(complete ser file for 2D data, 13 plane ser file for 3D data). 	*/
+/*	After concatenation of the data to a single fid (2D) and 			*/
+/*	ser file (3D), respectively, the status parameters in the output	*/
+/*	dataset are adjusted.												*/
+/************************************************************************/ 
+/*  Author(s) :                                                 		*/
+/*  Name          : Aitor Moreno / Ralph Adams            				*/
+/*  Organisation  : Bruker BioSpin GmbH / University of Manchester, UK  */
+/*  Email         : aitor.moreno@bruker.ch ralph.adams@manchester.ac.uk */
+/************************************************************************/
+/* TS2.1 version                                                        */
+/* ACQUPATH instead of NEWACQUPATH, RSER2D old syntax: "s13" instead    */
+/* of 13, DELETEEXPNO in 3D loop                                        */
+/* for 3D Pure shift (M. Nilsson)                                       */
+/*																		*/
+/************************************************************************/
+/* 01JUN2011 modified to include debugging and correction for non-256   */
+/*           block sized data. Also added comments.  	(R. Adams)		*/
+/************************************************************************/
+
+#define MAXSIZE 655360
+
+int row[MAXSIZE], temp[MAXSIZE], temp2[256];
+int pmod, si1, si2, si3, si12, si13, si12c, drppts, npoints, nzero=0, i4, debug, twoFiveSixCorr;
+int aexpno=9999, pexpno=9998, nexpno=expno+1000; 
+double sw1, sw2, sw3;
+float l4; 
+char infile[PATH_MAX], outfile[PATH_MAX], statustext[256];
+FILE *fpin, *fpout;
+
+GETCURDATA
+
+/*debug = 1 for on, 0 for off*/
+debug=0;
+if(debug == 1){(void)printf("Debugging on\n");}
+
+/* Function to round double to integer */
+int round_to_int(double d) {
+	return d<0?d-.5:d+.5;
+	}
+
+int round_to_int_f(float f) {
+	return f<0?f-.5:f+.5;
+	}
+	
+/* Check experiment type, 2D or 3D */
+FETCHPAR("PARMODE",&pmod)
+if ( (pmod < 1) || (pmod > 2) )
+    STOPMSG("Not a 2D or 3D dataset.\nTry changing pparmod in the processing parameters.")
+
+/* 2D */ 
+if (pmod == 1){ 
+/*Get status parameters */
+    if(debug == 1){(void)printf("Starting 2D conversion\n");}
+	FETCHPAR1S("TD",&si1)
+	FETCHPAR("TD",&si2)
+	FETCHPAR1S("SW",&sw1)
+	FETCHPARS("SW",&sw2)
+	si12=si1*si2;
+
+
+	twoFiveSixCorr=256-(si2%256);
+	if(twoFiveSixCorr == 256){twoFiveSixCorr = 0;}
+		if(debug == 1){(void)printf("Correction Value for si2 not divisible by 256: %d\n",twoFiveSixCorr);}
+		if(debug == 1){(void)printf("Full si2: %d\n",si2+twoFiveSixCorr);}
+	si12c=si1*(si2+twoFiveSixCorr);
+	
+/* Digitial to analog conversion, define Topspin input ("ser") and output ("fid") data files */
+	CONVDTA(aexpno)
+	REXPNO(aexpno)
+	strcpy(infile, ACQUPATH("ser"));
+	GETINT("Enter new expno for 1D pureshift data:  ",nexpno) 
+	RSER(1,nexpno,1)
+	REXPNO(nexpno)
+	strcpy(outfile,ACQUPATH("fid"));
+	REXPNO(aexpno)
+
+/* Define the start position and the number of points to extract for concatenation of the FID */
+	FETCHPAR("CNST 4",&l4)
+	if(debug == 1){(void)printf("Value of cnst4 passed to macro: %f\n",l4);}
+		
+	drppts=round_to_int_f(l4);
+	if(debug == 1){(void)printf("Value of drppts passed on in macro: %d\n",drppts);}
+	drppts=(drppts*2);
+
+	/*drppts=2;*/
+	if(debug == 1){(void)printf("'Complex' points to drop: %d\n",drppts);}
+
+	npoints=round_to_int(sw2/sw1);
+
+	/*read and store the entire 2D SER file*/
+	if((fpin = fopen(infile,"r")) == NULL){STOPMSG("Open of infile failed!\n")}
+	if(fread(row,sizeof(int),si12c,fpin)!=si12c){STOPMSG("Read in of ser file failed!\n")}
+	if(debug == 1){(void)printf("Full file size should be: %d\n",si1*(si2+twoFiveSixCorr));}
+	fclose(fpin);	 
+
+/* Delete the temporary expno 9999 */
+	DELETEEXPNO(name, aexpno, disk, user)
+
+/* extract and concatenate the chunked FID's to single FID */
+	if((fpout=fopen(outfile,"w")) == NULL){STOPMSG("Open of outfile failed!\n")}
+	i1=0;
+	while(i1 < si1){
+		if(debug == 1){(void)printf("%d \n",i1);}
+		for (i2=0; i2<2*npoints; i2++){
+			/*temp[i2]=row[i1*si2+i2+drppts];*/
+			sprintf(statustext,"%d of %d (%d.%d)  ",i1,si1,i1,i2);
+			Show_status(statustext);
+			if(debug == 1){(void)printf("%d.%d(%d)  ",i1,i2,i1*(si2+twoFiveSixCorr)+i2+drppts);}
+			temp[i2]=row[i1*(si2+twoFiveSixCorr)+i2+drppts]; /*added correction for the case that si2 is not a multiple of 256*/
+			}
+		if(fwrite(temp, sizeof(int), 2*npoints, fpout) != 2*npoints) {STOPMSG("writing to outfile failed")}
+		i1++;
+		if(debug == 1){(void)printf("\n",i1);}		
+	}
+	fclose(fpout);
+
+/* Set status parameter TD in the output dataset according to constructed FID length */
+	REXPNO(nexpno)
+	SETCURDATA
+	STOREPARS("TD",2*npoints*si1)
+	if(debug == 1){(void)printf("Finished 2D conversion\n");}
+	VIEWDATA_SAMEWIN
+}
+
+/* 3D */
+if (pmod == 2){
+	/* Get required status parameters for all dimensions */
+    if(debug == 1){(void)printf("Starting 3D conversion\n");}
+	FETCHPAR3S("TD",&si1)   /*  zs  */
+	FETCHPARNS(2,"TD",&si2) /*  noe */
+	FETCHPAR("TD",&si3)     /*  fid */
+	FETCHPAR3S("SW",&sw1)   /**/
+	FETCHPARNS(2,"SW",&sw2) /**/
+	FETCHPARS("SW",&sw3)    /**/
+	si13=si3*si1;
+	
+	if(debug == 1){(void)printf("si1: %d\nsi2: %d\nsi3: %d\nsw1: %d\nsw2: %d\nsw3: %d\n",si1,si2,si3,sw1,sw2,sw3);}
+	if(debug == 1){(void)printf("Data Size for each plane: %d\n",si13);}
+	
+/* digital to analog conversion */
+	CONVDTA(aexpno)
+	REXPNO(aexpno)
+	if(debug == 1){(void)printf("Converted data to analog\n");}
+	
+/* Define Topspin input data file */
+	RSER2D("s13",1,pexpno)
+	REXPNO(pexpno)
+	strcpy(infile,ACQUPATH("ser"));
+	REXPNO(aexpno)
+
+/* Define Topspin output data file, create 2D output file using RSER2D */ 
+	GETINT("Enter new expno for 2D pureshift NOESY data:  ",nexpno)
+	RSER2D("s23",1,nexpno)
+	REXPNO(nexpno)
+	strcpy(outfile,ACQUPATH("ser"));
+	REXPNO(aexpno)
+
+/* Define the start position and the number of points to extract for concatenation of the FID */
+	FETCHPAR("CNST 4",&l4)
+	if(debug == 1){(void)printf("Value of cnst4 passed to macro: %f\n",l4);}
+		
+	drppts=round_to_int_f(l4);
+	if(debug == 1){(void)printf("Value of drppts passed on in macro: %d\n",drppts);}
+	drppts=(drppts*2);
+
+	/*drppts=2;*/
+	if(debug == 1){(void)printf("Real + Imaginary points to drop: %d\n",drppts);}
+
+	npoints=round_to_int(sw3/sw1);
+	
+/* Create array filled with zeros to properly process the direct dimension */
+/* The data has to be a multiple of 256 due to the way Bruker saves it in blocks*/
+	nzero=256-(2*npoints*si1)%256;
+	if (nzero!=256)	{
+		for(i3=0; i3<nzero; i3++){
+			temp2[i3]=NULL;
+		}
+	}
+	if(debug == 1){(void)printf("Zero Padding: %d\n",nzero);}
+	
+/* As the data was saved in blocks which are multiples of 256 we have to jump the zeroes at the end of each fid if each one isn't a multiple of 256 */
+/*	twoFiveSixCorr=256-(si3%256);*/
+/*	if(debug == 1){(void)printf("Correction Value for si3 not divisible by 256: %d\n",twoFiveSixCorr);}*/
+/*	if(debug == 1){(void)printf("Remainder for si3/256 : %d\n",si3%256);} */
+	
+	twoFiveSixCorr=256-(si3%256);
+	if(twoFiveSixCorr == 256){twoFiveSixCorr = 0;}
+	if(debug == 1){(void)printf("Correction Value for si3 not divisible by 256: %d\n",twoFiveSixCorr);}
+	
+	
+/* extract and concatenate the chunked FID's to single FID's and add them into 2D ser file */
+	if ((fpout=fopen(outfile,"w")) == NULL){
+		STOPMSG("Open of outfile failed!\n")
+	}
+	
+	/*Put some information into the status bar*/
+	sprintf(statustext,"Starting Processing Loop");
+	Show_status(statustext);
+	ssleep(2); /*Wait for a couple of seconds so that it can be seen*/
+	
+	for(i4=1; i4<=si2; i4++){ 																/*for pointer i4 go from 1 to si2 (noe) through si2 planes of size si1*si3 */ /*changed "i4=i4++" to "i4++" */
+		if(debug == 1){(void)printf("\nLoop position %d.",i4);}
+		DELETEEXPNO(name, pexpno, disk, user)													/*Delete any redundant data*/
+		RSER2D("s13",i4,pexpno)																	/*Read 13 plane with increment in si2*/
+		if ((fpin = fopen(infile,"r")) == NULL){STOPMSG("Open of ser file failed!\n")}			/*Read the data in then check if the data was read in*/
+		if (fread(row,sizeof(int),si13,fpin)!=si13){STOPMSG("Read in of ser file failed!\n")}   /*Read the data into parameter 'row; and check the size of the data*/
+		fclose(fpin); 																			/*Close the data file*/
+		i1=0;																					/*Set up the pointer for the loop over the ZS loop*/
+		while(i1 < si1)	{																		/*Loop over si1 (ZS) with pointer i1 from 0 to si1-1*/
+			if(debug == 1){(void)printf("\nLoop position %d.%d\n",i4,i1);}
+			for (i2=0; i2<2*npoints; i2++){														/*Loop over 2*npoints for the data transfer to the temporary file*/
+				sprintf(statustext,"%d of %d (%d.%d.%d)  ",i4,si2,i4,i1,i2);
+				Show_status(statustext);
+				if(debug == 1){(void)printf("%d.%d.%d ",i4,i1,i2);}
+				temp[i2]=row[i1*(si3+twoFiveSixCorr)+i2+drppts]; 			/*transfer data in defined position to temporary file, fid, added correcdtion if si2 is not a multiple of 256*/
+			}
+			if(fwrite(temp, sizeof(int), 2*npoints, fpout) != 2*npoints){STOPMSG("writing to outfile failed")} /*Write the data out and check it was written out ok*/
+			i1++;																				/*increment the pointer*/
+		}
+		if (nzero!=256){												
+			if(fwrite(temp2, sizeof(int), nzero, fpout) != nzero){STOPMSG("writing of zero's to outfile failed")} /*add some zeros if the file size is not a multiple of 256 then check this worked ok*/
+		}
+	}
+	if(debug == 1){(void)printf("\n");}
+	fclose(fpout); 		/*close the output file*/
+
+/* copy of 2D loop start - for reference when modifying the above*/
+/**/
+/*		if((fpout=fopen(outfile,"w")) == NULL){STOPMSG("Open of outfile failed!\n")}
+/*		i1=0;
+/*		while(i1 < si1){
+/*			for (i2=0; i2<2*npoints; i2++){
+/*				temp[i2]=row[i1*(si2+twoFiveSixCorr)+i2+drppts]; 
+/*			}
+/*		if(fwrite(temp, sizeof(int), 2*npoints, fpout) != 2*npoints) {STOPMSG("writing to outfile failed")}
+/*		i1++;
+/*		}
+/*		fclose(fpout);
+/**/
+/* 2D loop end */
+	
+/* Delete the temporary expno's 9998 and 9999 */
+	DELETEEXPNO(name, aexpno, disk, user)
+	DELETEEXPNO(name, pexpno, disk, user)
+
+/* Set status parameter TD according to constructed ser file length */
+	REXPNO(nexpno)
+	SETCURDATA
+	STOREPARS("TD",2*npoints*si1) 																					/*zs, si1*/
+	STOREPAR1S("TD",si2) 																							/*noe, si2*/
+	if(debug == 1){(void)printf("Finished 3D conversion\n");}
+	VIEWDATA_SAMEWIN
+}    
+
+QUIT

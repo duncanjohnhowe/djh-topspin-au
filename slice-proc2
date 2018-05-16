@@ -1,0 +1,31 @@
+
+int td;
+int dest_exp=10000;
+int il=0;
+char logfile[PATH_MAX];
+FILE *ftitle = NULL;
+
+GETCURDATA
+FETCHPAR1S("TD",&td)
+i1=0;
+dest_exp=dest_exp+expno;
+
+TIMES(td)
+	i1 ++;
+	RSER(i1,i1+dest_exp,1)
+END
+il=0;
+TIMES(td)
+	il ++;
+	DATASET(name,il+dest_exp,1,disk,user)
+	SETCURDATA
+	VIEWDATA_SAMEWIN
+	STOREPAR("PH_mod",1)
+	EFP
+	APK
+	APKS
+	APK
+	ABS
+END
+
+QUIT

@@ -1,0 +1,160 @@
+/*--------------------------------------------------------------*/
+/* Title	: Program janus_reproc				*/
+/* Date		: 16-Feb-2001					*/
+/* Version	: 1.1						*/
+/* Author	: John Hollerton				*/
+/* Contents	: Main program					*/
+/*--------------------------------------------------------------*/
+/* Description	:						*/
+/*		  Allows reprocessing of spectra aquired 	*/
+/*		  with JCH PC control program.			*/
+/*								*/
+/* External module : None.					*/
+/* Internal module : None.					*/
+/*								*/
+/* This revision reads the defaults from a file...		*/
+/* This version works on IRIX6.3+ or WinNT!!!!			*/
+/*--------------------------------------------------------------*/
+/*milestone - get working using defaults file for filenames:	*/
+/*	    - modify janus_sx setting to be aquire only - option 1*/
+
+#define RETRY_TIME 10 		/*Process sleep time in seconds*/
+   char	   defaultsfile[256]="f:/chemist/defaults-csv.txt";
+ //  char def_file[255]="f:/chemist/defaults-csv.txt";
+    char    reprodfile[256], repready[256], tmp_str[1024];
+   char	    specno[256], batcmd[255], reprodfilebat_txt[255];
+   char	   proclist[255], procinstruct[255];
+   char prefix[40],diskunit[40],suser[40],tunefile[40];
+   char archpath[80],archive[20],gradshim[20],shimset[40];
+   char datadir[1024]="";
+   char in_data[1024]="";
+   char   *env_name, *file_data, *field, *ed;
+   int     rephase, expansions, curloop, finish, pid;
+   float   rescale, cycalc;
+   FILE   *frprod = NULL, *frpready = NULL, *fdef = NULL;
+   FILE  *lockfile = NULL, *fbat = NULL, *plist = NULL;
+
+
+/*--- Get defaults from the defaults file ----------------------*/
+//strcpy( defaultsfile, def_file );
+fdef = fopen( defaultsfile, "r" );
+rewind(fdef); //go to begining of file
+file_data = fgets(in_data, 1024, fdef); //read in file as a continuous string
+fclose(fdef); //close the file
+//file is open, read data
+field = strtok(in_data, ",");
+strcpy( prefix,field);
+Proc_err(INFO_OPT,"prefix is %s",prefix);
+field = strtok(NULL, ",");
+sscanf(field, "%s", &diskunit);
+	Proc_err(INFO_OPT,"diskunit is %s",diskunit);
+field = strtok(NULL, ",");
+sscanf(field,"%s", &suser);
+	Proc_err(INFO_OPT,"suser is %s",suser);
+field = strtok(NULL,",");
+sscanf(field,"%s",&tunefile);
+	Proc_err(INFO_OPT,"tunefile is %s", tunefile);
+field = strtok(NULL,",");
+sscanf(field,"%s",&shimset);
+	Proc_err(INFO_OPT,"shimset is %s", shimset);
+field = strtok(NULL,",");
+sscanf(field,"%s",&archpath);
+	Proc_err(INFO_OPT,"archpath is %s", archpath);
+field = strtok(NULL,",");
+sscanf(field,"%s",&archive);
+	Proc_err(INFO_OPT,"archive is %s", archive);
+field = strtok(NULL,",");
+sscanf(field,"%s",&gradshim);
+	Proc_err(INFO_OPT,"gradshim is %s", gradshim);
+Proc_err(INFO_OPT,"parsed defaults file");
+Proc_err ( INFO_OPT, "Reprocessor started...");
+sleep(2);
+/*--------------------------------------------------------------*/
+/*	Create PID lock file					*/
+/*the sample submission PC looks for the jrlock.txt file where the prodfile is*/
+/*to check if the reprocessor is running*/
+
+pid = _getpid();
+sprintf(tmp_str,"%s%s\\jrlock.txt",diskunit,suser);
+lockfile=fopen(tmp_str,"wt");
+fprintf(lockfile, "%d\n", pid);
+fclose(lockfile);
+/*--------------------------------------------------------------*
+/*--- Assign filenames for signalling --------------------------*/
+
+sprintf(reprodfile, "%s%s\\replot.txt", diskunit,suser );
+sprintf(reprodfilebat_txt, "%s%s\\replot.txt", diskunit,suser);
+sprintf(batcmd, "%s%s\\janus-reproc-bat.bat",diskunit,suser);
+	Proc_err ( INFO_OPT, "before main loop");
+sprintf(proclist, "%s%s\\proclist.txt",diskunit,suser);
+finish = FALSE;
+while ( finish != TRUE )
+{
+	/*--- Start main loop ---*/
+	sleep(2);
+	//Proc_err ( INFO_OPT, "In main loop");
+	/*------------------------------------------------*/
+	if (access(reprodfile, R_OK)!=0)
+	{
+		sleep( 10 );
+		curloop++;
+		continue;
+	}
+	/*--- Reset the loop counter ---------------------*/
+	curloop=1;
+	/*------------------------------------------------*/
+	/*---Read the data string from the file ----------*/
+	sleep(5);
+	frprod = fopen(reprodfile, "r");
+	file_data = fgets(in_data, 100, frprod);
+	fclose( frprod );
+
+	/*---and clean up after you ----------------------*/
+	sprintf( tmp_str, "del %s", reprodfilebat_txt );
+	fbat = fopen(batcmd, "w");
+	fputs( tmp_str,fbat);
+	fclose(fbat);
+	system(batcmd);
+	
+	//sprintf( tmp_str, "rm %s", reprodfile );  
+        //system ( tmp_str );
+        //sprintf( tmp_str, "rm %s", repready );  
+        //system ( tmp_str );
+
+	/*--- Now extract the data -----------------------*/
+	/*--- Spectrum Number, rephase, expansions, rescale ---*/
+	/*---    string         int         int      float  ---*/
+	field = strtok( in_data, ",");
+	strcpy( specno, field );
+	field = strtok( NULL, "," );
+	sscanf( field, "%d", &rephase );
+	field = strtok( NULL, "," );
+	sscanf( field, "%d", &expansions );
+	field = strtok( NULL, "," );
+	sscanf( field, "%f", &rescale );
+	
+	/*--- Now do the reprocessing -------------------*/
+	Proc_err ( INFO_OPT, "Reprocessing: %s", in_data);
+	sprintf(datadir,"%sdata\\%s\\nmr\\",diskunit,suser);
+	DATASET( specno, 10, 1, datadir, suser);
+	GETCURDATA
+	VIEWDATA_SAMEWIN
+	plist = fopen (proclist,"a");
+	if (plist == NULL)
+	{
+		Proc_err(INFO_OPT, "Can't open %s to add to processing list", proclist);
+		exit(1);
+	}
+	
+Proc_err(INFO_OPT,"dataset details :- %s,%s,%s",name,disk,user);
+
+	sprintf(procinstruct, "%s,%s,chemist,plot\n",specno,disk);
+	fputs(procinstruct,plist);
+	fclose(plist);
+//	XAU("janus-master-proc",cmd);
+
+}
+QUIT
+
+
+

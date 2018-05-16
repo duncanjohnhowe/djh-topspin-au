@@ -1,0 +1,76 @@
+float pphigh=250.0;
+float pplow=-10.0;
+float plothigh=220.0;
+float plotlow=-10.0;
+int new_exp;
+char titlefile[512], titletext[512], titletextnew[512];  
+char pdfname[512]="d:/disk2/data/service/pdf/";
+FILE *ftitle = NULL;
+
+GETCURDATA
+VIEWDATA_SAMEWIN
+
+/*Now read the title file from the source exp into the titletext variable*/
+sprintf( titlefile, "%s/data/%s/nmr/%s/%i/pdata/1/title", disk, user, name, expno);
+ftitle = fopen( titlefile, "r");
+fgets( titletext, 512, ftitle);
+fclose( ftitle);
+
+/*convert the data into exp+6000, and backwards predict the first 16 points*/
+new_exp=expno+6000;
+CONVDTA(new_exp)
+expno=new_exp;
+VIEWDATA_SAMEWIN
+STOREPAR("TDOFF",16);
+XCMD("me_mod LPbr");
+STOREPAR("NCOEF", 1024);
+XCMD("phc0 0")
+XCMD("phc1 0 ")
+
+/*now write out a title file with variable contents of the variable titletext and a bit of description of whats been done*/
+sprintf( titlefile, "%s/data/%s/nmr/%s/%i/pdata/1/title", disk, user, name, new_exp);
+sprintf( titletextnew, "Data has been converted to analogue. Backwards predicted 16 points to remove cryoprobe baseline roll." );
+ftitle = fopen( titlefile, "a");
+fputs( titletext, ftitle); /*put the orig title in*/
+fputs( titletextnew, ftitle); /*add new text to it*/
+fclose( ftitle);
+
+/*set sr value to solvent*/
+
+XCMD("13cref");
+
+
+/*do a bit of processing to check the result*/
+EFP
+STOREPAR("f1p", pphigh);
+STOREPAR("f2p", pplow);
+STOREPAR("MI", 0.5);
+STOREPAR("PC", 1.2);
+STOREPAR("CY",200);
+STOREPAR("MAXI", 2000.0);
+PP
+XCMD("as_phase1d");
+STOREPAR("CY",200);
+STOREPAR("MAXI", 2000.0);
+STOREPAR("MI", 1.0);
+STOREPAR("PC", 2.0);
+PP
+XCMD("djh_cycalc13c");
+STOREPAR("f1p", 250.0);
+STOREPAR("f2p", -10.0);
+STOREPAR("MI", 1.0);
+STOREPAR("PC", 2.0);
+ABS
+APK
+PP
+
+STOREPAR("f1p",plothigh);
+STOREPAR("f2p",plotlow);
+
+sprintf( pdfname, "%s/data/%s/nmr/%s/%d/pdata/%d/%s.pdf", disk, user, name, expno, procno, name );
+AUTOPLOT_TO_FILE(pdfname);
+sprintf( pdfname, "%s/data/%s/nmr/%s/%d/pdata/%d/%s.emf", disk, user, name, expno, procno, name );
+AUTOPLOT_TO_FILE(pdfname);
+
+
+QUIT

@@ -1,0 +1,246 @@
+/* quantint - quantify integrals                                                  */
+/* Set integral scaling to mM using previous calibration (see quantcal)           */
+/* with adjustment for ns and rg, and PULCON correction for salt (p1) and         */
+/* temperature (te) [ Wider & Dreier, JACS 128, 2571-2576 (2006) ]                */
+/*                                                                                */
+/* Note! Remember this setup is only valid for samples with the same spectrometer */
+/* setup and configuration (probe type, tuning, pulse calibration, etc) and this  */
+/* includes tube diameter - thin wall tubes will appear 'more concentrated' than  */
+/* normal tubes! (e.g. 0.1% Ethylbenzene = 8.17mM, so would integrate:            */
+/*   40.8 : 16.3 : 24.5   BUT standard s/n test sample is usually in thin wall    */
+/* tube, so would need to adjust up by factor of 10-15% relative to normal tubes  */
+/*                                                                                */
+/* andrew.gibbs@bruker.co.uk                                                      */
+/* 2007/10/25                                                                     */
+/* 2007/11/15 record calibration dataset                                          */
+/* 2007/12/18 check instrum and probe are the same as calibration                 */
+/*            store local copy of calibration file and use if quantcal repeated   */
+/*            (this allows repeat of quantint on archived data on other systems   */
+/*            use 'quantint reset' to force use of local conf calibration file)   */
+/*            Tested with TopSpin2.1 and XWINNMR 3.5 (change VIEWDATA line 197)   */
+/* 2007/12/20 store calibration file within conf/instr/<curinst>                  */
+/*            warn if current pulseprogram different to calibration, attempt to   */
+/*            correct if zg30 (multiply by 2!)                                    */
+/* 2008/08/06 account for change in SI during reprocessing                        */
+float rg;
+int ns;
+float intscl;
+int nc_proc;
+double cal;
+float calp1, calte, p1, te;
+char curline[256];
+int numint, i;
+#define INTLIST "integrals.txt"  
+char curprin[PATH_MAX];
+char calpath[PATH_MAX];
+FILE *calfile; 
+#define CALNAME "quantcal"
+char intrngpath[PATH_MAX];
+FILE *intrngfile;
+#define MAXLINES 20
+char linein[MAXLINES][256];
+int calexpno, calprocno;
+char caldisk[PATH_MAX], caluser[256], calname[256];
+char *p;
+int uselocal;
+int plen, ilen;
+int si;
+
+#undef tm
+#include <time.h>
+time_t cdtime_s, dtime_s, ctime_s, now_s;	/* seconds since 1970 */
+struct tm *now;			      /* structure with year, month etc. */
+
+
+#define MAXINT 2048
+float left[MAXINT], right[MAXINT], slope[MAXINT], bias[MAXINT];
+FILE *output;
+char outputpath[PATH_MAX];
+char cal_probe[512], cal_instrum[512];
+char probe[512], instrum[512];  
+FILE *localcalfile;
+char localcalfilepath[PATH_MAX];
+int numlines;
+char pulprog[100], cal_pulprog[100];
+float ppcorrect = 1.0;
+char ppmessage[512];
+
+
+GETCURDATA
+now_s=time(NULL); 
+FETCHPARS("DATE", &dtime_s)
+FETCHPARS("NS", &ns)
+FETCHPARS("RG", &rg)
+FETCHPARS("NC_proc", &nc_proc)
+FETCHPARS("TE", &te)
+FETCHPARS("P 1", &p1)
+FETCHPARS("INSTRUM", instrum)
+FETCHPARS("PROBHD", probe)
+FETCHPARS("PULPROG", pulprog)
+FETCHPARS("SI", &si)
+
+/* PROBHD seems to have a \n at the end?  Ditch last character as workaround */
+i1 = strlen(probe);
+if (i1 > 1) probe[i1-1] = '\0';
+
+/* check if forcing use of new calibration */
+uselocal=FALSE;
+sprintf(localcalfilepath, "%s/data/%s/nmr/%s/%d/%s", disk, user, name, expno, CALNAME);
+if (strstr(cmd, "reset") == NULL)
+{ 
+	/* if not then check if calibration already performed */
+	if (access(localcalfilepath, R_OK)==0) uselocal = TRUE;
+}
+ 
+if (uselocal)
+{
+	strcpy(calpath, localcalfilepath);
+}
+else
+{
+	sprintf(calpath, "%s/instr/%s/%s", PathXWinNMRConf(), instrum, CALNAME); 
+  if ( (localcalfile = fopen(localcalfilepath, "w")) == NULL)
+  {
+  		Proc_err(ERROR_OPT, "Warning! Cannot make copy of calibration file to %s!\nCheck dataset permissions?", localcalfilepath);
+  }
+}
+if ( (calfile=fopen(calpath, "r")) == NULL)
+{
+		Proc_err(INFO_OPT, "Could not open calibration file %s!\nPlease setup using calibration sample and 'quantcal'", calpath);
+		ABORT
+}
+
+numlines = 0;
+while(numlines < MAXLINES && fgets(linein[numlines], 255, calfile) != NULL)
+{
+		if (localcalfile) fprintf(localcalfile, "%s", linein[numlines]);
+		numlines++;
+}
+fclose(calfile);
+if (localcalfile) fclose(localcalfile);
+
+if (numlines < 8) 
+{ 
+	Proc_err(INFO_OPT, "did not read all information from %s - have you run quantcal?", calpath);
+	ABORT
+}
+
+/* parse calibration file */
+sscanf(linein[0], "%le", &cal);
+sscanf(linein[1], "%f", &calp1);
+sscanf(linein[2], "%f", &calte);
+sscanf(linein[3], "%d", &cdtime_s);
+sscanf(linein[4], "%d", &ctime_s);
+sscanf(linein[5], "%s", cal_instrum); 
+strcpy(cal_probe, linein[6]);  if ( (p=strstr(cal_probe, "(probehead)")) != NULL) *p=0;
+sscanf(linein[7], "%s %s %s %d %d", caldisk, caluser, calname, &calexpno, &calprocno);
+sscanf(linein[8], "%s", cal_pulprog);
+
+/* check if calibration info matches this dataset */
+plen = strlen(cal_probe);
+if (strlen(probe) < plen) plen=strlen(probe);
+ilen = strlen(cal_instrum);
+if (strlen(instrum) < ilen) ilen=strlen(instrum);
+
+if ( strncmp(cal_probe, probe, plen) || strncmp(instrum, cal_instrum, ilen)  )
+{
+		Proc_err(ERROR_OPT, "Dataset instrument/probe not same as calibration!\nCurrent : %s, %s\nQuantcal: %s, %s\n\nCalibration aborted.", instrum, probe, cal_instrum, cal_probe);
+		ABORT
+}
+
+if ( strcmp(pulprog, cal_pulprog) )
+{
+	  sprintf(ppmessage, "Warning: current pulseprogram (%s) not same as calibration (%s)\nQuantitation accuracy may be impaired!", pulprog, cal_pulprog);
+		/* try and make some correction for the most common 'non-quantitative' operation */
+	  if (!strcmp(pulprog, "zg30") && !strcmp(cal_pulprog, "zg"))
+	  {
+	   ppcorrect=2.0;
+	   strcat(ppmessage, "\nFor zg30 a correction factor of 2.0 has been applied to these results");
+	  }
+		Proc_err(ERROR_OPT, ppmessage); 
+}
+
+/* calculate required integral scaling factor and store */
+intscl = pow(2.0, nc_proc) * (te * p1 * ppcorrect)/(calte * calp1 * rg * ns * cal *si);
+STOREPARS("INTSCL", intscl)
+
+/* now update intrng file to show integrals are now scaled */
+sprintf(intrngpath, "%s/data/%s/nmr/%s/%d/pdata/%d/intrng", disk, user, name, expno, procno);
+if ( (intrngfile = fopen(intrngpath, "r"))==NULL)
+{
+		ABS
+		if ( (intrngfile = fopen(intrngpath, "r"))==NULL)
+		{
+				Proc_err(INFO_OPT, "could not open integral file %s?", intrngpath);
+				ABORT
+		}
+}
+
+if (fgets(curline, 255, intrngfile) == NULL)
+{
+		Proc_err(INFO_OPT, "intrng file %s does not contain data?", intrngpath);
+		ABORT
+}
+
+
+numint = 0;
+//if (curline[0] != 'A')
+//{
+	while ( (fgets(curline, 255, intrngfile) != NULL) && (numint < MAXINT))
+	{
+		if (curline[0] != '#')
+		{
+			sscanf(curline, "%f %f", &left[numint], &right[numint]);
+			numint++;
+		}
+	}
+	fclose(intrngfile);
+	if ( (intrngfile = fopen(intrngpath, "w"))==NULL)
+	{
+			Proc_err(INFO_OPT, "could not open integral file %s for write?", intrngpath);
+			ABORT
+	}	
+	fprintf(intrngfile, "A 1.0\n");
+	for (i = 0; i< numint; i++)
+	{
+			fprintf(intrngfile, "%f %f 0.0 0.0\n", left[i], right[i]);
+	}
+//}
+fclose(intrngfile);
+
+/* list integrals to file and force scaling */
+FETCHPAR("CURPRIN", curprin)
+STOREPAR("CURPRIN", INTLIST)
+LI
+STOREPAR("CURPRIN", curprin)	
+
+VIEWDATA_SAMEWIN /** change to VIEWDATA for XWINNMR **/
+
+/* output details to log */
+sprintf(outputpath, "%s/data/%s/nmr/%s/%d/pdata/%d/quantint.out", disk, user, name, expno, procno);
+if ( ( output = fopen(outputpath, "w") ) == NULL)
+{
+		Proc_err(ERROR_OPT, "could not write output file %s", outputpath);
+		ABORT
+}
+fprintf(output, "Quantint log\n\n");
+fprintf(output, "Reference integral scale  %g at p1 %.1f us, te %.1f K (rg 1, ns 1, nc_proc 1)\n", cal, calp1, calte);
+fprintf(output, "Calculated integral scale %g at p1 %.1f us, te %.1f K, rg %.1f, ns %d nc_proc %d\n\n", intscl, p1, te, rg, ns, nc_proc);
+now = localtime(&now_s);
+fprintf(output, "Quantitation performed at   %04d/%02d/%02d %02d:%02d:%02d (%d)\n", now->tm_year+1900, 1+now->tm_mon, now->tm_mday, now->tm_hour, now->tm_min, now->tm_sec, now_s);
+now = localtime(&dtime_s);
+fprintf(output, "on data acquired at         %04d/%02d/%02d %02d:%02d:%02d (%d)\n\n", now->tm_year+1900, 1+now->tm_mon, now->tm_mday, now->tm_hour, now->tm_min, now->tm_sec, dtime_s);
+now = localtime(&ctime_s);
+fprintf(output, "Calibration performed at    %04d/%02d/%02d %02d:%02d:%02d (%d)\n", now->tm_year+1900, 1+now->tm_mon, now->tm_mday, now->tm_hour, now->tm_min, now->tm_sec, ctime_s);
+now = localtime(&cdtime_s);
+fprintf(output, "on data acquired at         %04d/%02d/%02d %02d:%02d:%02d (%d)\n", now->tm_year+1900, 1+now->tm_mon, now->tm_mday, now->tm_hour, now->tm_min, now->tm_sec, cdtime_s);
+fprintf(output, "dataset                     %s %s %s %d %d\n", caldisk, caluser, calname, calexpno, calprocno);
+fprintf(output, "instrument, probe           %s, %s\n", cal_instrum, cal_probe);
+if (ppcorrect != 1.0)
+{
+	fprintf(output, "\n%s\n", ppmessage);
+}
+
+fclose(output);
+
+QUIT

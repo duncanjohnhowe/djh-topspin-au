@@ -1,0 +1,144 @@
+/*** ^^A -*-C++-*- **********************************************/
+/*      wvm                               05.01.2015            */
+/****************************************************************/
+/*      Short Description :                                     */
+/*      AU program to make shapes using the WaveMaker  		*/
+/****************************************************************/
+/*      Keywords :                                              */
+/*      WaveMaker, wave, shapes, shaped pulses    		*/
+/****************************************************************/
+/*      Description/Usage : wvm -opt                            */
+/*      options, opt = -x (dry run, no shapes created,          */
+/*                         calibrate only)                      */
+/*                     -a (auto setup, shape parameters set     */
+/*                         into the current parameter set)      */
+/*                     no argument (manual setup)               */
+/*                     -l (display the log file)                */
+/*                     -al (combination of -a and -l)           */
+/****************************************************************/
+/*      Author(s) :                                             */
+/*      Name            : Eriks Kupce                           */
+/*      Organisation    : Bruker BioSpin                        */
+/*      Email           : Eriks.Kupce@bruker.com                */
+/****************************************************************/
+/*      Name            Date    Modification:                   */
+/*      wem             130618  created                         */
+/****************************************************************/
+/*
+$Id: wvm,v 1.1 2015/01/05 09:15:03 wem Exp $
+*/
+
+
+AUERR = wvm(curdat);
+QUIT
+
+static int wvm_report(const char *path, int warnonly)
+{
+  char    txt[128];
+  FILE*   fp;
+  int     i;
+
+  if ((fp = fopen(path, "r")) == NULL)       /* open the logfile */
+  {
+    Proc_err(DEF_ERR_OPT, "%s\n%s", "Cannot open wvm.log file...", path);
+    return 1;
+  }
+
+  if(warnonly)   /* show warnings only */
+  {
+    while(fgets(txt,sizeof(txt),fp))      // show the Wellcome part - first 5 lines
+    {
+      if(strstr(txt, "WARNING") != NULL) printf("%s", txt);
+    }
+    fclose(fp);
+    return 0;
+  }
+
+  while((fgets(txt,sizeof(txt),fp)) && ((strstr(txt, "Opening:") == NULL))) // show the header
+    printf("%s", txt);
+
+  printf("\n%s", txt);
+  i=0;
+
+  while((fgets(txt,sizeof(txt),fp)) && (txt[0] != 'E'))  // show the saved files
+  {
+    if(strstr(txt, "saved") != NULL)
+    {
+      printf("%s", txt);
+      i++;
+    }
+  }
+  if(i) printf("\n");
+  printf("%s", txt);
+  while(fgets(txt,sizeof(txt),fp))                // show the Experiment Setup section only
+    printf("%s", txt);
+  printf("~~~\n");
+  fclose(fp);
+
+  return 0;
+}
+
+int wvm(const char* curdat)
+{
+  const char* args[7];
+  char  pp[512], cmd[PATH_MAX], text[PATH_MAX];
+  int   show_log=2;
+
+  sprintf(cmd, "%s/nmr/wavemaker/bin/wvm" EXECUTABLE_EXTENSION, PathXWinNMRExpStan());
+  strcpy(text, ACQUPATH(0));
+
+  args[0] = cmd;
+  args[1] = "-e";
+  args[2] = text;
+  args[3] = 0;
+  args[4] = 0;
+  args[5] = 0;
+  args[6] = 0;
+
+  if(i_argc > 2)
+  {
+    if (strcmp(i_argv[2], "-al") == 0) args[3] = "-a";               // auto setup
+    else if (strcmp(i_argv[2], "-x") == 0)  args[3] = "-x";          // do not write shapefiles
+    else if (strcmp(i_argv[2], "-v") == 0)  show_log=1;              // run wvm and show full log file
+    else if (strcmp(i_argv[2], "-l") == 0)  show_log=-1;             // only show log file
+    else if (strcmp(i_argv[2], "-p") == 0)  show_log=-2;             // only show wvm.par file
+    else if ((i_argc > 3) && (strcmp(i_argv[2], "-i") == 0))
+    {
+      show_log=-1;
+      args[3] = "-i";
+      args[4] = i_argv[3];          // only show shape definition file
+      ExecProgram(args, 1);
+    }
+    else if (strcmp(i_argv[2], "-a") == 0)
+    {
+      args[3] = "-a";               // auto setup, do not show log-file
+      show_log=0;
+    }
+    else if (strcmp(i_argv[2], "-f") == 0)
+    {
+      args[3] = "-f";               // auto setup, do not show log-file
+      if(i_argc > 3)
+      {
+    	if(strcmp(i_argv[3], "pp") == 0)
+    	{
+    	  FETCHPAR("PULPROG", pp)
+    	  strcat(pp,".par");
+    	  args[4] = pp;
+    	}
+    	else
+          args[4] = i_argv[3];
+      }
+    }
+  }
+
+  if(show_log > -1)  ExecProgram(args, 1);
+  if(show_log == -2) strcat(text, "/wvm.par");
+  else strcat(text, "/wvm.log");
+  if(show_log == 2) wvm_report(text,0);
+  else if(show_log==0) wvm_report(text,1);
+  else showfile(text);
+  if(args[3] && (strcmp(args[3], "-a") == 0))
+    XCMD("sendgui ased");
+
+  return 0;
+}

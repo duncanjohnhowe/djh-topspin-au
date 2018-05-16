@@ -1,0 +1,223 @@
+/******* -*-C++-*- **********************************************/
+/*  setdiffparm     17.11.2010                                  */
+/****************************************************************/
+/*  Short Description :                                         */
+/*  extracts diffusion sequence parameters and stores           */
+/*  parameters for "vargrad" simfit fitting (T1/T2)             */
+/*  or DOSY processing.                                         */
+/****************************************************************/
+/*  Keywords :                                                  */
+/*  diffusion, dosy, T1                                         */
+/****************************************************************/
+/*  Description/Usage :                                         */
+/*  call AU program                                             */
+/*  Bruker library pulse programs currently supported:          */
+/*                                                              */
+/*  stebpgp1s       stegp1s                                     */
+/*  stebpgp1s19                                                 */
+/*  stebpgpin1s                                                 */
+/*  ledbpgp2s       ledgp2s                                     */
+/*  ledbpgpii2s3d                                               */
+/*  ledbpgpml2s3d                                               */
+/*  ledbpgpno3s3d                                               */
+/*  dstebpgp3s      dstegp3s                                    */
+/*                                                              */
+/*  The AU program may be called with a command line option     */
+/*  which is a combination of "STE" / "DSTE" and "mp" / "bp"    */
+/*  (example: "DSTEbp") to overwrite the automatic recognition  */
+/*  of method and mono-polar or bi-polar gradients, which is    */
+/*  given by the name of the pulse program. This is useful if   */
+/*  non-release pulse programs are used.                        */
+/****************************************************************/
+/*  Author(s) :                                                 */
+/*  Name            : Rainer Kerssebaum                         */
+/*  Organisation    : Bruker BioSpin GmbH                       */
+/*  Email           : rainer.kerssebaum@bruker-biospin.de       */
+/****************************************************************/
+/*  Name    Date    Modification:                               */
+/*  rke     991126  created                                     */
+/*  rke     000203  guesses added                               */
+/*  rke     000209  new PP options                              */
+/*  rke     000609  DOSY parms added                            */
+/*  rke     001207  cmd line options added                      */
+/*  rke     010409  correct gamma for other nuclei than 1H      */
+/*  rke     030120  PP name detection bug corrected             */
+/*  rke     050414  PP name bug, DSTE calculation corrected     */
+/*  rke     101117  problem with gamma calculation corrected    */
+/****************************************************************/
+/*
+$Id: setdiffparm,v 1.12 2011/03/25 17:26:48 wem Exp $
+*/
+
+AUERR = setdiffparm(curdat);
+QUIT
+
+static double getcfreq(const char*);
+
+#define STEmp 1
+#define STEbp 2
+#define DSTEmp 3
+#define DSTEbp 4
+#define Oneshot 5
+
+
+int setdiffparm(const char* curdat)
+{
+char    nuc[100],pulprog[64];
+int     pultype=0,pmod,td1;
+float   d20, d16, pgrad, cnst18;
+double  bf1,protonfreq;
+double	gamma = 4257.7;
+
+FETCHPAR("PARMODE",&pmod);
+if ( (pmod < 1) || (pmod > 2) )
+    STOPMSG("Not a 2D or 3D dataset")
+
+FETCHPARS("PULPROG",pulprog);
+
+if (i_argc <= 2)
+{
+    if (strncmp(pulprog,"stebp",5) == 0 || strncmp(pulprog,"ledbp",5) == 0)
+        pultype = STEbp;
+    else if (strncmp(pulprog,"dstebp",6) == 0)
+        pultype = DSTEbp;
+    else if (strncmp(pulprog,"ste",3) == 0 || strncmp(pulprog,"led",3) == 0)
+        pultype = STEmp;
+    else if (strncmp(pulprog,"dste",4) == 0)
+        pultype = DSTEmp;
+    else if (strncmp(pulprog,"Doneshot",8) == 0)
+        pultype = Oneshot;
+    else
+        STOPMSG("unsupported pulse program")
+}
+else
+{
+    if (strcmp(i_argv[2],"STEmp")  == 0)    pultype = STEmp;
+    if (strcmp(i_argv[2],"STEbp")  == 0)    pultype = STEbp;
+    if (strcmp(i_argv[2],"DSTEmp") == 0)    pultype = DSTEmp;
+    if (strcmp(i_argv[2],"DSTEbp") == 0)    pultype = DSTEbp;
+    if (strcmp(i_argv[2],"Doneshot") == 0)  pultype = Oneshot;
+
+    if (pultype == 0)
+        STOPMSG("unsupported mode\n"
+		"use a combination of\n"
+		"'STE' or 'DSTE' and\n"
+		"'mp' or 'bp' (mono/bi-polar)")
+}
+
+FETCHPARS("D 20",&d20);
+FETCHPARS("D 16",&d16);
+FETCHPARS("P 30",&pgrad);
+FETCHPAR1S("TD",&td1);
+FETCHPAR1S("NUC1",nuc);
+FETCHPARS("CNST 18",&cnst18);
+/* Proc_err(ERROPT_ACKN,"%s",nuc); */
+
+if (strcmp(nuc,"1H"))
+    {
+    protonfreq=getcfreq("1H");
+    bf1=getcfreq(nuc);
+    gamma *= bf1/protonfreq;
+    }
+
+pgrad/=1000;
+d20*=1000;
+d16*=1000;
+
+STORET1PAR("GAMM",gamma);
+STORET1PAR("NUMPNTS",td1);
+STORET1PAR("FCTTYPE",10);
+STORET1PAR("COMPNO",1);
+STORET1PAR("GUESSES 0",1.0);
+STORET1PAR("GUESSES 1",1e-9);
+STORET1PAR("GUESSES 12",0.1);
+STORET1PAR("GUESSES 13",1e-10);
+STORET1PAR("LISTTYP","difflist");
+
+STOREDOSYPAR("Gamma",gamma);
+STOREDOSYPAR("Nexp",1);
+STOREDOSYPAR("Xlist","difflist");
+STOREDOSYPAR("Ndata",td1);
+STOREDOSYPAR("Scale",1);
+
+
+switch (pultype)
+{
+    case STEmp:
+         STORET1PAR("LITDEL",pgrad);
+         STORET1PAR("BIGDEL",d20);
+         STOREDOSYPAR("Glen",pgrad);
+         STOREDOSYPAR("Gdist",d20);
+         break;
+
+    case STEbp:
+         STORET1PAR("LITDEL",pgrad*2);
+         STORET1PAR("BIGDEL",d20-d16/2);
+         STOREDOSYPAR("Glen",pgrad*2);
+         STOREDOSYPAR("Gdist",d20-d16/2);
+         break;
+
+    case DSTEmp:
+         STORET1PAR("LITDEL",pgrad);
+         STORET1PAR("BIGDEL",d20-d16-4*pgrad/3);
+         STOREDOSYPAR("Glen",pgrad);
+         STOREDOSYPAR("Gdist",d20-d16-4*pgrad/3);
+         break;
+
+    case DSTEbp:
+         STORET1PAR("LITDEL",pgrad*2);
+         STORET1PAR("BIGDEL",d20-3*d16-8*pgrad/3);
+         STOREDOSYPAR("Glen",pgrad*2);
+         STOREDOSYPAR("Gdist",d20-3*d16-8*pgrad/3);
+         break;
+         
+    case Oneshot:
+         STORET1PAR("LITDEL",pgrad*2);
+         STORET1PAR("BIGDEL",cnst18/(1000*pgrad*2*pgrad*2));
+         STOREDOSYPAR("Glen",pgrad*2);
+        STOREDOSYPAR("Gdist",cnst18/(1000*pgrad*2*pgrad*2));       
+         break;
+}
+
+Show_meta(SM_PROCP);
+return 0;
+}
+
+static double getcfreq(const char* nucl)
+{
+  char fulinst[PATH_MAX];
+  char inputline[120];
+  char nucleus[10];
+  char instrum[80];
+  FILE *fp;            /* file pointer to nuclei file */
+
+  getinstr(instrum, NULL);
+  sprintf(fulinst,"%s/%s/%s/%s",PathXWinNMRConf(),"instr",instrum,"nuclei");
+
+  if ((fp = fopen(fulinst, "r")) == NULL)
+  {
+    Proc_err(DEF_ERR_OPT, "%s:\n%s",
+	     "Could not open file for reading", fulinst);
+    return -1.0;
+  }
+
+  while (fgets(inputline, sizeof(inputline), fp))
+  {
+    if (inputline[0] != '#')
+    {
+      double freq = -2.0;
+
+      nucleus[0] = 0;
+      sscanf(inputline, "%s%*s%*s%*f%*s%lf", nucleus, &freq);
+
+      if (strcmp(nucleus, nucl) == 0)
+      {
+        fclose(fp);
+        return freq;
+      }
+    }
+  }
+
+  fclose(fp);
+  return -2.0;
+}

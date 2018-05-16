@@ -1,0 +1,68 @@
+int cur_expno;
+float Hsr;  
+int i;
+float IPS[501],maxips,minips,maxips2,minips2, phc0;
+char a[120], path[100];
+char procnoPath[PATH_MAX] = "";
+FILE *fptr;
+
+GETCURDATA
+//peakpick, compare peak intensity and check phase - i.e biggest peak is -ve
+ STOREPAR("PSIGN", 2)
+ STOREPAR("PC", 1.5)
+ STOREPAR("ASSFAC", 0)
+ STOREPAR("CY", 100.0)
+ STOREPAR("F1P",15.0)
+ STOREPAR("F2P",-0.5)
+ STOREPAR("MI",2.0)
+
+ XWP_PP
+ sleep(5);
+
+ (void)sprintf(path,"%sdata/%s/nmr/%s/%d/pdata/%d/peak.txt",
+		    disk,user,name,expno,procno);
+
+ fptr=fopen(path,"r");
+ if (fptr==NULL)
+  {
+  Proc_err(DEF_ERR_OPT,"peakfile not found");
+  STOP
+  }
+
+ TIMES(4)
+    fgets(a,120,fptr);
+ END
+ i=1;
+ maxips=0.0;
+ minips=0.0;
+
+ TIMES(500)
+  if(fscanf(fptr,"%*d %*f %*f %*f %f",&IPS[i])<1)
+     {
+     break;
+     }
+     else 
+     {
+     if (IPS[i]>maxips) maxips=IPS[i];
+     if (IPS[i]<minips) minips=IPS[i];
+     //Proc_err(INFO_OPT, "maxips = %f", maxips);
+     //sleep(1);
+     }
+  i=i+1;
+ END
+ close(fptr);
+ 
+ /*** check phase and reverse if necessary***/
+ minips2 = minips*minips;
+ maxips2 = maxips*maxips;
+
+ if (maxips2 > minips2)
+     {
+     Show_status("reverse phase");
+		 sleep(2);
+     FETCHPARS("PHC0", &phc0)
+     phc0 = phc0 + 180.0;
+     STOREPAR("PHC0", phc0);
+     EFP
+     }
+QUIT

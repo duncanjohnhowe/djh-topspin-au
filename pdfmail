@@ -1,0 +1,34 @@
+char pdfname[512]="d:/disk2/data/service/pdf/";
+char cmd_str[511];
+char email[255];
+char password[128];
+char body[255];
+
+FILE *fbat = NULL;
+char batfile[]="c:\\windows\\email.bat";
+char batcmd[100]="c:/windows/email.bat";
+
+
+if ( cmd[0] == 0 ) 
+    GETSTRING( "Enter email address then a space, then your password ", cmd );
+
+sscanf( cmd, "%s %s", email, password );
+GETSTRING("Enter a short message", body);  
+
+GETCURDATA;
+DATASET( name, expno, 1, disk, "service");
+XCMD("dpl1");
+
+sprintf( pdfname, "d:/disk2/data/service/pdf/%s.pdf", name );
+AUTOPLOT_TO_FILE(pdfname);
+
+sprintf( pdfname, "d:\\disk2\\data\\service\\pdf\\%s.pdf", name);
+
+sprintf (cmd_str, "sendemail -f djh35@cam.ac.uk -t %s -u NMR email test -m %s -a %s -s smtp.hermes.cam.ac.uk:587 -o tls=yes -xu djh35 -xp %s", email, body, pdfname, password);
+
+fbat = fopen(batfile, "w");
+fputs(cmd_str,fbat);
+fclose(fbat);
+system(batcmd);
+
+QUIT

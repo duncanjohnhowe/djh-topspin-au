@@ -1,0 +1,23 @@
+/*****************************************/
+/*Ignore whats in AUNMP and do whats saved in USERP5*/
+
+
+#include <stdio.h>
+#include <inc/sysutil>
+
+char orig_au[255],proc_au[255];
+
+
+
+
+/*first thing to do is process the data in the directory we're in*/
+GETCURDATA
+
+FETCHPAR("AUNMP", &orig_au);
+FETCHPAR("USERP5", &proc_au);
+STOREPAR("AUNMP", proc_au) ;
+CPR_exec(proc_au, WAIT_TERM); //the processing may be time consuming...better wait for it to finish
+//XAUP("proc_au",cmd);
+STOREPAR("AUNMP",orig_au);
+
+QUIT

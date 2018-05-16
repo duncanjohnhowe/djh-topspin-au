@@ -1,0 +1,40 @@
+/*MILESTONE - get to read defaults file for file location*/
+
+float phigh=25.0;
+float plow=-10.0;
+float hsr=0.0;
+char titlefile[PATH_MAX], titletext[512], titletextnew[512]; 
+char pdfname[PATH_MAX]="";
+FILE *ftitle = NULL; 
+
+GETCURDATA;
+Proc_err(INFO_OPT,"in janus-1h-proc");
+STOREPAR("cy", 20.0);
+STOREPAR("mi",0.5);
+XCMD("efp");
+//XCMD("sendgui apk0");
+XCMD("apks");
+XCMD("efp");
+XCMD("abs");
+XAU("djh_as_cycalc",cmd);
+phigh=15.0;
+plow=-0.1;
+STOREPAR("f1p",phigh);
+STOREPAR("f2p",plow);
+STOREPAR("MI",0.5);
+XCMD("apk");
+XCMD("abs")
+PP;
+
+DATASET( name, expno, 1, disk, "chemist");
+STOREPAR("layout", "+/janus-proton.xwp")
+sprintf( titlefile, "%s%s/%s/%i/pdata/1/title", disk, user, name, expno); 
+sprintf(titletextnew, "\n%s\n", name);
+ftitle = fopen( titlefile, "a");
+fputs( titletextnew, ftitle); /*add new text to it*/
+fclose( ftitle);
+
+QUIT
+
+
+

@@ -1,0 +1,101 @@
+/*** ^^A -*-C++-*- **********************************************/
+/*	au_watersc		01.06.2001			*/
+/****************************************************************/
+/*	Short Description :					*/
+/*	AU program for water-suppression (W19) spectra for use in	*/
+/*	automation, e.g., with sample changer.			*/
+/****************************************************************/
+/*	Keywords :						*/
+/*	water suppression					*/
+/****************************************************************/
+/*	Description/Usage :					*/
+/*	AU program for water-suppression spectra for use in	*/
+/*	automation, e.g., with sample changer. For foreground	*/
+/*	acquisition, please use AU program au_water.		*/
+/****************************************************************/
+/*	Author(s) :						*/
+/*	Name		: Rainer Kerssebaum			*/
+/*	Organisation	: Bruker BioSpin GmbH			*/
+/*	Email		: rainer.kerssebaum@bruker.de		*/
+/****************************************************************/
+/*	Name		Date	Modification:			*/
+/*	rke		960918	created				*/
+/*	eng		010601  reduce number of scans for	*/
+/*				prep. exp. sugg. by M. Geckle	*/
+/*	wem		070418	convertpeaklist			*/
+/*Fiddled with by Duncan Howe Sep 08 to do W19 water suppression.*/
+/*First set up your w19 parameter set, change the xau program to my_watersc19*/
+/*It (should) read in your 90 pulse and the number of scans set.*/
+/*change the pulse prog to zg30, the p1 to 1us, the rg to 1 and run zg30 */
+/*do the peak picking, find the biggest, change the O1 to that, change the  pulse program  back to p39gp19*/
+/*and run that with your original number of scans*/
+/****************************************************************/
+/*
+$Id: au_watersc,v 1.9 2007/04/18 04:37:15 wem Exp $
+*/
+
+float PSH, PSP, IPS, maxpsh, maxpsp, maxips,p90;
+char del[PATH_MAX], path[PATH_MAX];
+double sf, sfo1 ;
+int noofscans, pscal_save, orignoofscans;
+FILE *fptr;
+
+GETCURDATA
+FETCHPAR("P 1",&p90)
+STOREPAR("PULPROG","zg30")
+STOREPAR("RG",1.0)
+STOREPAR("P 1",1.0)
+FETCHPAR("NS",&noofscans)
+FETCHPAR("NS",&orignoofscans)
+STOREPAR("NS",4)
+
+ZG
+ERRORABORT
+EF
+ERRORABORT
+APK
+SREF
+FETCHPAR("PSCAL",&pscal_save)
+STOREPAR("PSCAL",0)
+PP
+ERRORABORT
+XCMD("sendgui convertpeaklist txt")
+ERRORABORT
+(void)sprintf(path,"%s/data/%s/nmr/%s/%d/pdata/%d/peak.txt",
+		    disk,user,name,expno,procno);
+fptr=fopen(path,"r");
+if (fptr==NULL)
+{
+  Proc_err(DEF_ERR_OPT,"Cannot open %s for reading",path);
+  ABORT
+}
+TIMES(4)
+  fgets(del,sizeof(del),fptr);
+END
+maxips=0.0;
+maxpsh=0.0;
+while (fscanf(fptr,"%*d %*f %f %f %f",&PSH,&PSP,&IPS)>2)
+{
+  if (IPS > maxips)
+  {
+    maxips=IPS;
+    maxpsh=PSH;
+    maxpsp=PSP;
+  }
+}
+fclose(fptr);
+unlink(path);
+FETCHPAR("SF",&sf)
+sfo1=sf+maxpsh*1.0e-6;
+noofscans=orignoofscans*8;
+STOREPAR("RG",64.0)
+STOREPAR("SFO1",sfo1)
+STOREPAR("P 1",p90)
+STOREPAR("NS",noofscans)
+STOREPAR("PULPROG","p3919gp")
+STOREPAR("PSCAL",pscal_save)
+XCMD("autophase")
+ZG
+
+QUIT
+

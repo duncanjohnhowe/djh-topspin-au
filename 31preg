@@ -1,0 +1,16 @@
+float pphigh=25.0;
+float pplow=-10.0;
+float plothigh=60.0;
+float plotlow=20.0;
+
+
+GETCURDATA;
+
+STOREPAR("f1p",plothigh);
+STOREPAR("f2p",plotlow);
+
+
+
+QUIT
+
+

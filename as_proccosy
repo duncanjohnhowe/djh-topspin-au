@@ -1,0 +1,21 @@
+char pdf_Name[PATH_MAX] = "";
+char szFileStatus[20] = "";
+char szTypeOfData[20] = "";
+char cmdstr[200] = "";
+char procnoPath[PATH_MAX] = "";
+char pdfname[512]="d:/disk2/data/service/pdf/";
+
+GETCURDATA
+
+XMAC("2dp")
+XCMD("as_projref")
+LEVCALC
+
+sprintf( pdfname, "%s/data/%s/nmr/%s/%d/pdata/%d/%s.pdf", disk, user, name, expno, procno, name );
+AUTOPLOT_TO_FILE(pdfname);
+
+
+QUIT
+/*
+#include "C:\Bruker\TOPSPIN\exp\stan\nmr\au\src\as_pdf_common.inc"
+#include "C:\Bruker\TOPSPIN\exp\stan\nmr\au\src\as_sysutil.inc"*/

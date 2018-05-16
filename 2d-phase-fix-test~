@@ -1,0 +1,17 @@
+int loop=1;
+int f1_si;
+
+GETCURDATA;
+XFB;
+FETCHPAR1S("TD",&f1_si);
+
+while (loop<=f1_si)
+{	
+	RSR(loop, 999);
+	RPROCNO(999);
+	APK;
+	WSR(loop, 1, expno, name, user, disk);
+	loop++;
+}
+QUIT
+

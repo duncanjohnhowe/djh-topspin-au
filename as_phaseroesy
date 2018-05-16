@@ -1,0 +1,187 @@
+/* ========================================================================== */
+/*                                                   			                    */
+/*   as_phaseroesy                                   			                    */
+/*   Sean Lynn, based on oa_2dinv from Mark Vine.       	                    */
+/*                                                  			                    */
+/*   Description - phase roesy spectra                 		                    */
+/*                                                   			                    */
+/* ========================================================================== */
+
+#define MAXPEAKS		10000
+#define NUMOFPPHEADERLINES	4		// header lines in peaks.txt file
+
+char lineBuf[BUFSIZ];				// To hold lines from the peakpick file
+int numOfPeaks;
+FILE *peaksFp;					// Pointer to peakpicking output file
+int i, j;					// Loop counters
+
+//------------------------------------------------------------------------------
+//	Identify the nuclei and solvent 
+//------------------------------------------------------------------------------
+
+
+char f1Nucleus[6];
+char f2Nucleus[6];			
+char solvent[BUFSIZ];
+
+FETCHPARS("NUC1",f2Nucleus)
+FETCHPARS("NUC1",f1Nucleus)  // same as NUC1 for ROESY
+
+FETCHPARS("SOLVENT",solvent)
+
+//------------------------------------------------------------------------------
+//	Get PH_mod settings
+//------------------------------------------------------------------------------
+
+
+
+
+int f2phmod;
+int f1phmod;					// To hold PH_mod values
+int xf2mFlag;
+
+FETCHPAR("PH_mod",&f2phmod)			// Check if F2 needs phasing
+FETCHPAR1("PH_mod",&f1phmod)			// Same for F1
+if (f2phmod == 0 && f1phmod == 1)		// F2 = "no", F1 = "pk", do xf2m at end
+{
+    STOREPAR("PH_mod",1)			// Do "pk", reset at end of processing
+    f2phmod = 1;
+    xf2mFlag = 1;				// Do xf2m at end of processing
+}
+else
+    xf2mFlag = 0;
+
+
+//------------------------------------------------------------------------------
+//	Construct an F1 projection. 
+//------------------------------------------------------------------------------
+
+
+char regionFile[PATH_MAX];
+char currRowProcnoPath[PATH_MAX];
+char nextRowProcnoPath[PATH_MAX];
+char sumProcnoPath[PATH_MAX];
+
+int origExpno;					// contains original 2D data
+int origProcno;					// contains original 2D spectrum
+int f1ProjExpno;
+int f1ProjProcno;				// contains 1D projections
+int currRowProcno;
+int nextRowProcno;
+int sumProcno;					// To contain sum of F2 rows for phasing
+int rowNum;
+int prevRowNum;
+int currRow;
+int rowAddress[MAXPEAKS];
+
+float newPHC0;
+float newPHC1;					// Phase parameters
+
+origExpno = expno;
+origProcno = procno;
+f1ProjProcno = 1000;
+    
+XF2M						// Just in case phase in F1 is wrong
+ 
+RVPP(f1ProjProcno)				// Create positive F1 projection
+DATASET(name,origExpno,f1ProjProcno,disk,user)
+    
+//ABS						// Create intrgn file
+
+STOREPAR("CY",100.0)
+STOREPAR("MAXI",101.0)				// bugfix, pp only picks < MAXI, not <=
+STOREPAR("MI",5.0)
+STOREPAR("PC",2.00)
+strcpy(regionFile,f1Nucleus);			// reconstruct correct region filename
+strcat(regionFile,".");
+strcat(regionFile,solvent);
+STOREPAR("SREGLST",regionFile)
+STOREPAR("PSCAL", 4)			// update param with correct name 
+XWP_PP						// peakpick into peak.txt
+sleep(2);
+
+
+//------------------------------------------------------------------------------
+//	Autophase the peaks in the F2 dimension, if requested
+//------------------------------------------------------------------------------
+
+
+if (f2phmod == 1)				// PH_mod = "pk"
+{
+    numOfPeaks = 0;
+    if ((peaksFp = fopen(PROCPATH("peak.txt"),"r")) != NULL)
+    {
+        for (i = 0; i < NUMOFPPHEADERLINES; i++)	// Skip the file header
+    	    fgets(lineBuf,sizeof(lineBuf),peaksFp);
+    
+        j = 0;
+        while ((fgets(lineBuf,sizeof(lineBuf),peaksFp) != NULL) && (j < MAXPEAKS))
+    	    sscanf(lineBuf,"%d %d",&numOfPeaks,&rowAddress[j++]); 
+        fclose(peaksFp);
+    
+        if (numOfPeaks > 0)			// Have peaks, can phase-correct F2
+        {
+    	    currRow = 0;
+    	    currRowProcno = f1ProjProcno + 1;
+    	    nextRowProcno = currRowProcno + 1;
+    	    sumProcno = nextRowProcno + 1;
+    
+    	    DATASET(name,origExpno,origProcno,disk,user)
+    	    XFB					// Remove effect of xf2m
+    
+    	    rowNum = (int)(rowAddress[currRow] + 0.5);
+    	    RSR(rowNum,currRowProcno)		
+    	    RSR(rowNum,nextRowProcno)	
+    	    RSR(rowNum,sumProcno)		// In case we have only one peak
+    
+    	    DATASET(name,origExpno,sumProcno,disk,user)
+    	    DATASET2(name,origExpno,currRowProcno,disk,user)
+    	    DATASET3(name,origExpno,nextRowProcno,disk,user)
+    	    STOREPAR("DATMOD",1)
+    	    STOREPAR("DC",1.0)
+    
+    	    prevRowNum = rowNum;
+    	    while (++currRow < j)		// Have some more peaks
+    	    {
+    	        rowNum = (int)(rowAddress[currRow] + 0.5);
+    	        if (rowNum > prevRowNum)	// don't add the same row twice
+    	        {
+    	            WRPA(name,origExpno,currRowProcno,disk,user)
+    
+	            DATASET(name,origExpno,origProcno,disk,user)
+	            RSR(rowNum,nextRowProcno)
+	            DATASET(name,origExpno,sumProcno,disk,user)
+	            ADD
+	            prevRowNum = rowNum;
+	        }
+	    }
+	    APK
+	    FETCHPAR("PHC0",&newPHC0)
+	    FETCHPAR("PHC1",&newPHC1)
+
+	    char sumProcnoPath[PATH_MAX];
+	    //strcpy(sumProcnoPath, PROCPATH(".."));
+
+      sprintf( currRowProcnoPath, "%s/data/%s/nmr/%s/%d/pdata/%d", disk, user, name, expno, currRowProcno );
+      sprintf( nextRowProcnoPath, "%s/data/%s/nmr/%s/%d/pdata/%d", disk, user, name, expno, nextRowProcno );
+      sprintf( sumProcnoPath, "%s/data/%s/nmr/%s/%d/pdata/%d", disk, user, name, expno, sumProcno );
+      i1 = unlinkpr( currRowProcnoPath );		// delete the currRowProcno directory
+      i1 = unlinkpr( nextRowProcnoPath );		// Delete the nextRowProcno directory
+      DATASET( name,origExpno,origProcno,disk,user )	// Return to the 2D spectrum 
+      i1 = unlinkpr( sumProcnoPath );		// now can delete the sumProcno directory
+        }    
+    }
+}
+//DATASET(name,origExpno,origProcno,disk,user)	// Return to the 2D spectrum
+if (numOfPeaks > 0 && f2phmod == 1)
+{
+    newPHC0 = newPHC0 + 180.0;
+    STOREPAR("PHC0",fmod(newPHC0,360.0))	// Minimize phase-induced baseline roll
+    STOREPAR("PHC1",newPHC1)
+}
+DATASET(name,origExpno,origProcno,disk,user)
+XFB						// reprocess with correct F2 phase
+VIEWDATA_SAMEWIN
+
+QUIT
+#include<inc/sysutil>				

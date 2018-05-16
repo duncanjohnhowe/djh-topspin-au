@@ -1,0 +1,37 @@
+/*
+Program:	as_prochsqc
+Version:	1.0
+Author:		Sean Lynn
+Date:     12/1/2007
+Description:	process to get correct phase and reference parameters,
+              set layout.
+*/
+
+float hsr;
+char pdfname[512]="d:/disk2/data/service/pdf/";
+
+GETCURDATA
+XFB
+XCMD("as_phasehsqc")
+XCMD("as_projref")
+XMAC("2dp")
+FETCHPAR("SR",&hsr)
+hsr=hsr-2.0; /* Sean thinks this is due to an isotope shift */
+STOREPAR("SR",hsr)
+//check for 13c and set layout accordingly
+GETCURDATA3
+if ( expno3 == expno )
+	{
+	STOREPAR("layout", "+/hmqc.xwp")
+	}
+if ( expno3 != expno)
+	{
+	STOREPAR("layout", "+/hmqc.xwp")
+	}
+
+sprintf( pdfname, "%s/data/%s/nmr/%s/%d/pdata/%d/%s.pdf", disk, user, name, expno, procno, name );
+AUTOPLOT_TO_FILE(pdfname);
+
+
+QUIT
+

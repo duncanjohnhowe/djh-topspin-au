@@ -1,0 +1,223 @@
+/*** ^^A -*-C++-*- **********************************************/
+/*	humpcal		09.06.1997				*/
+/****************************************************************/
+/*	Short Description :					*/
+/*	This AU program performs the 'hump test' - it measures	*/
+/*	the width of a peak at 0.55% and 0.11% of its signal	*/
+/*	height.							*/
+/****************************************************************/
+/*	Keywords :						*/
+/*	hump test, half width					*/
+/****************************************************************/
+/*	Description/Usage :					*/
+/*	This program calculates the width of a peak at		*/
+/*	0.55% and 0.11% of its signal height. The result	*/
+/*	is referred to as the 'hump test'. The AU program	*/
+/*	was primarily written to determine the width of		*/
+/*	the Chloroform peak, but can be applied to other	*/
+/*	singular peaks as well. The result is written to the 	*/
+/*	file 'humpcal.out' in the processed data directory	*/
+/*	and is also displayed in foreground.			*/
+/*	This function uses a file called linutil which		*/
+/*	resides in the /.../prog/include/inc directory.		*/
+/*								*/
+/*	Important Note : The plot region must be defined	*/
+/*			 in such a way that the signal of	*/
+/*			 interest can be found by the		*/
+/*			 peak picking command 'pp' or 'pps'.	*/
+/*								*/
+/****************************************************************/
+/*	Author(s) :						*/
+/*	Name		: Mike Engelhardt			*/
+/*	Organisation	: Bruker BioSpin GmbH			*/
+/*	Email		: michael.engelhardt@bruker.de		*/
+/****************************************************************/
+/*	Name	Date		Modification:			*/
+/*	eng	970609		created				*/
+/*	ge	20061213	adapted to xml peak format	*/
+/****************************************************************/
+/*
+/*
+Ripped out LOADS to just get the half width.
+
+$Id: humpcal,v 1.12 2007/03/29 15:38:26 wem Exp $
+*/
+
+AUERR = local_au(curdat);
+QUIT
+
+#include <inc/linutil>
+
+
+/***** Restore original parameters *****/
+
+static void restorepar(
+    double oldcy, 
+    float oldmi, 
+    float oldmaxi, 
+    float oldpc,
+    const char* curdat
+    )
+{
+    STOREPAR("MI",oldmi);
+    STOREPAR("MAXI",oldmaxi);
+    STOREPAR("PC",oldpc);
+    STOREPAR("CY",oldcy);
+}
+
+int local_au(const char *curdat)
+{
+    char pppath[PATH_MAX], line[PATH_MAX];
+    FILE *fptr1;
+    double posx, upwidth, lowwidth, halfwidth, hw2, upl, upr, lowl, lowr;
+    double confidfact, oldcy;
+    float oldmi, oldmaxi, oldpc, origsr, curpos;
+    int fptr2, start, upthr, upval, lowval, minpoints;
+    int intens;
+    int ret1, ret2;
+
+    XCMD("status all");
+    XCMD("setdef ackn no");
+
+    upwidth = 0.0;
+    lowwidth = 0.0;
+
+/* Save some original parameters */
+
+    FETCHPAR("MI",&oldmi);
+    FETCHPAR("MAXI",&oldmaxi);
+    FETCHPAR("PC",&oldpc);
+    FETCHPAR("CY",&oldcy);
+
+/* Find peak of interest */
+/*bugger that....
+    STOREPAR("MI",50.0);
+    STOREPAR("MAXI",10000.0);
+    STOREPAR("PC",4.0);
+    STOREPAR("CY",100.0);
+    PP;
+    ERRORABORT;
+    
+    ERRORABORT;
+*/
+
+XCMD("sendgui convertpeaklist txt");
+
+/* read result of peak picking */
+
+    sprintf (pppath,"%s/data/%s/nmr/%s/%d/pdata/%d/peak.txt",
+	     disk,user,name,expno,procno);
+    if ( (fptr1 = fopen (pppath,"r")) == NULL )
+    {
+	Proc_err (DEF_ERR_OPT,"Could not open peak picking result file\n"
+		  "%s\nPlease check experiment setup later.",pppath);
+	restorepar(oldcy,oldmi,oldmaxi,oldpc,curdat);
+	ABORT;
+    }
+
+/* Read comment lines and discard them */
+
+    TIMES(4)
+	fgets (line,sizeof(line),fptr1);
+    END;
+
+/* Read result of peak picking */
+
+    if ( fgets (line,sizeof(line),fptr1) == NULL )
+    {
+	Proc_err (DEF_ERR_OPT,"No peak found !\n"
+		  "Please check the currently \ndefined plot limits.\n"
+		  "Then run humpcal again.");
+	    fclose (fptr1);
+	    restorepar(oldcy,oldmi,oldmaxi,oldpc,curdat);
+	    ABORT;
+    }
+
+    if ((ret1 = sscanf (line,"%*d %lf %f %*f %*f",&posx,&curpos)) < 2)
+    {
+	double sf;
+	if ((ret2 = sscanf (line,"%*d %lf ? %f %*f",&posx,&curpos)) < 2)
+	{
+	    Proc_err(DEF_ERR_OPT, "Illegal peak list, ret1 = %d, ret2 = %d\n%s", ret1, ret2, line);
+	    ABORT;
+	}
+	FETCHPARS("SF",&sf);
+	curpos *= sf;
+    }
+    start = (int) floor (posx + 0.5);	/* point position of peak */
+    fclose (fptr1);
+    Proc_err(DEF_ERR_OPT, "posx = %d, curpos = %f", start, curpos);
+/* Read intensity of reference point from 1r file */
+
+    sprintf (pppath,"%s/data/%s/nmr/%s/%d/pdata/%d/1r",
+	     disk,user,name,expno,procno);
+    if ( (fptr2 = open (pppath,O_RDONLY)) == -1 )
+    {
+	Perror(DEF_ERR_OPT,pppath);
+	restorepar(oldcy,oldmi,oldmaxi,oldpc,curdat);
+	ABORT;
+    }
+    if ( lseek (fptr2,4*start,SEEK_SET) == -1 )
+    {
+	Perror(DEF_ERR_OPT,pppath);
+	(void) close (fptr2);
+	restorepar(oldcy,oldmi,oldmaxi,oldpc,curdat);
+	ABORT;
+    }
+    if ( read (fptr2,&intens,4) != 4 )
+    {
+	Perror(DEF_ERR_OPT,pppath);
+	(void) close (fptr2);
+	restorepar(oldcy,oldmi,oldmaxi,oldpc,curdat);
+	ABORT;
+    }
+    close (fptr2);
+
+/* Determine half width at half height */
+
+    upthr = 0.8 * intens;		/* start fit at this level */
+    upval = 0.5 * intens;		/* height at 50% intensity */
+    lowval = 0.5 * intens;		/* height at 50% intensity */
+    minpoints = 10;
+    confidfact = 2.0;		/* confidence factor : number of */
+				/* additional points for fitting */
+
+    if ( peakwidth(curdat, start, start, upthr, upval, lowval, minpoints,
+		   confidfact, &upl, &upr, &lowl, &lowr, &halfwidth, &hw2) )
+    {
+	restorepar(oldcy,oldmi,oldmaxi,oldpc,curdat);
+	ABORT;
+    }
+
+/* Determine hump width */
+/*
+    upthr = 0.01 * intens;			 
+    upval = 0.0055 * intens;		       
+    lowval = 0.0011 * intens;		       
+    minpoints = 20;
+
+    if ( peakwidth(curdat, start, start, upthr, upval, lowval, minpoints,
+		   confidfact, &upl, &upr, &lowl, &lowr, &upwidth, &lowwidth) )
+    {
+	restorepar(oldcy,oldmi,oldmaxi,oldpc,curdat);
+	ABORT;
+    }
+   
+*/
+
+
+/* Round values for printout of results */
+
+    halfwidth = ((double)(iround(halfwidth*100.0)))/100.0;
+    upwidth = ((double)(iround(upwidth*10.0)))/10.0;
+    lowwidth = ((double)(iround(lowwidth*10.0)))/10.0;
+    upr = ((double)(iround(upr*10.0)))/10.0;
+    upl = ((double)(iround(upl*10.0)))/10.0;
+    lowr = ((double)(iround(lowr*10.0)))/10.0;
+    lowl = ((double)(iround(lowl*10.0)))/10.0;
+
+/* Report results */
+
+    Proc_err (INFO_OPT,  "Half width : %.2f Hz", halfwidth);
+
+   }

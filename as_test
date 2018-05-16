@@ -1,0 +1,7 @@
+char procpath[100];
+
+GETCURDATA
+sprintf( procpath, "%s/data/%s/nmr/%s/%d/pdata/%d", disk, user, name, expno, 1000);
+i1 = delproc(procpath);
+QUIT
+#include "C:\Bruker\TOPSPIN\exp\stan\nmr\au\src\as_test.inc"

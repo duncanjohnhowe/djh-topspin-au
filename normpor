@@ -1,0 +1,171 @@
+/* normpor
+
+   normalise datasets specified in a portfolio file.  
+   RG and NS will be compared between the first dataset 
+   and each subsequent dataset in turn, datasets will be 
+   multiplied by the ratio (stored in DC parameter)
+
+use:	normpor
+		will be prompted for portfolio filename
+
+	xau normpor h994.por
+		will execute using the portfolio name
+
+
+   Notes
+   1) The program can easily be extended to compare other parameters
+   if desired - add the name into the params list, the type (integer,
+   float or double) into the ptypes list, and increase NUMPARAMS!
+
+   2) If you wish to simply multiply by the current DC values use
+   procpor with the 'mulc' command, e.g.
+
+	xau procpor h994.por mulc
+
+   3) To return data to the 'true' scale simply re-FT
+  
+andrew.gibbs@bruker.co.uk
+991103
+010212 add power factor, e.g. ns^0.5
+011019 check for xwin3.0 portfolios, use NC_proc to avoid clipping
+040421 check with xwin3.5.6/windows
+*/
+
+#define typeINT 0
+#define typeFLOAT 1
+#define typeDOUBLE 2
+#define ratioLINEAR 1.0
+#define ratioSQRT 0.5
+
+/**** Change the following to add/remove parameters *****/
+#define NUMPARAMS 2
+char params[NUMPARAMS][20] = { "NS", "RG" };
+char ptypes[NUMPARAMS] = { typeINT, typeFLOAT};
+float rtypes[NUMPARAMS] = { ratioSQRT, ratioLINEAR};
+
+float pvalues[NUMPARAMS];
+float tempfloat, multiplier;
+int tempint;
+double tempdouble;
+char porname[255];
+char message[255];
+char portypestr[255];
+char porformat[255];
+
+float portype;
+char cdisk[100], cuser[100], cname[100];
+int cexpno, cprocno;
+int nitems, nparams;
+int i;
+int reference=TRUE;
+FILE *porfile;
+
+/* program start */
+GETCURDATA
+
+/* get name of portfolio file: from command line, or ask! */
+if ( strcmp( cmd, "" ) == 0 ) 
+{
+        /* ask for portfolio file and params */
+        *porname=0;
+        GETSTRING("Portfolio of data: ", porname)
+}
+else
+{
+	strcpy(porname, cmd);
+}
+
+/* open and check portfolio file */
+if ( ( porfile = fopen(porname, "r") ) == NULL )
+{
+        sprintf(message, "Could not open portfolio file %s!", porname);
+        STOPMSG(message)
+}
+
+/* read header to determine type */
+fgets(portypestr, 255, porfile);
+sscanf(portypestr, "%s* %f", &portype);
+
+if (portype < 0.45) strcpy(porformat, "%s %s %s %d %d\n");
+else strcpy(porformat, "\"%[^\"]\" \"%[^\"]\" \"%[^\"]\" %d %d\n");
+
+/* skip second line */
+fgets(message, 255, porfile);
+
+if (fscanf(porfile, porformat, cdisk, cuser, cname, &cexpno,  &cprocno) != 5)
+{
+        STOPMSG("No datasets specified in portfolio?")
+}
+
+/* loop over all datasets in portfolio */
+do {
+	DATASET(cname, cexpno, cprocno, cdisk, cuser)
+
+	multiplier = 1.0;
+
+	/* loop over params */
+	for (i = 0; i < NUMPARAMS; i++)
+	{
+		/* initialise using first dataset parameters */
+		if (reference)
+		{
+			switch (ptypes[i])
+			{
+				case typeINT: 
+					FETCHPARS(params[i], &tempint)
+					pvalues[i] = (float)tempint;
+					break;
+				case typeFLOAT:
+					FETCHPARS(params[i], &tempfloat);
+					pvalues[i] = (float)tempfloat;
+					break;
+				case typeDOUBLE:
+					FETCHPARS(params[i], &tempdouble)
+					pvalues[i] = (float)tempdouble;
+					break;
+				default:
+					STOPMSG("Unknown parameter type - check program source!");
+		
+			}
+		}
+		else
+		{	
+			/* adjust mulitiplier for new dataset */
+			switch (ptypes[i])
+			{
+				case typeINT: 
+					FETCHPARS(params[i], &tempint)
+					multiplier *= (float)pow((pvalues[i]/(float)tempint), rtypes[i]);
+					break;
+				case typeFLOAT:
+					FETCHPARS(params[i], &tempfloat)
+					multiplier *= (float)pow((pvalues[i]/(float)tempfloat), rtypes[i]);
+					break;
+				case typeDOUBLE:
+					FETCHPARS(params[i], &tempdouble)
+					multiplier *= (float)pow((pvalues[i]/(float)tempdouble), rtypes[i]);
+					break;
+				default:
+					STOPMSG("Unknown parameter type - check program source!");
+			}
+		}	
+ 
+	}
+
+        sprintf(message, "%s %s %s %d %d:  DC = %f", cdisk, cuser, cname, cexpno, cprocno, multiplier);
+        Show_status(message);
+
+	/* do the multiplication */
+	STOREPAR("DC", multiplier);
+	MULC
+
+	/* not first dataset any more! */
+	reference = FALSE;	
+
+} while(fscanf(porfile, porformat, cdisk, cuser, cname, &cexpno,  &cprocno) == 5);
+fclose(porfile);
+
+Show_status("Finished");
+
+QUIT
+

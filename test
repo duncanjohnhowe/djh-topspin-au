@@ -1,0 +1,16 @@
+int loop=0;
+int td;
+int orig_exp;
+GETCURDATA
+orig_exp=expno;
+
+FETCHPAR1S("TD",&td)
+TIMES(td)
+	RPROCNO(1)
+	loop++;
+	RSR(loop, 999)
+	RPROCNO(999)
+	XCMD("apk")
+	WSR(loop, 1, expno, name, user, disk)
+END
+QUIT

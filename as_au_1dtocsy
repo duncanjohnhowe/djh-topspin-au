@@ -1,0 +1,90 @@
+/*	au_1dtocsy:  SM Lynn 12/7/2006			*/
+/*	acquisition macro to run selmlgp.2 (AS_1DTOCSY) under automation	*/
+/*	preset frequency list file and save by dataset name		*/
+
+#define USE_LIBACQ
+#define Avance 3
+#include <lib/util.h>
+
+int	first,nfreq,ns;
+float	o1[100],sr, spoff2;
+double	sfo1,bf2, o1h;
+char	f1listname[15],cfile[PATH_MAX],path[PATH_MAX],string[80];
+FILE	*fin, *fptr;
+
+/*copy data to new dataset*/
+GETCURDATA
+
+first=expno;
+
+STOREPAR("SR",sr);
+FETCHPAR("O1", &o1h)
+
+STOREPAR("FQ1LIST", name)
+  (void) sprintf(path,"%s/lists/f1/%s",getstan(0,0), name);
+
+/*set pointer fin to freqlist */
+  fin=fopen(path,"r");
+  if (fin==NULL)
+     {	Proc_err(0,"Frequency list not found.\n\nProgram aborted.");
+	STOP
+     }
+  nfreq=0;
+  fscanf(fin,"%*s %lf",&bf2);
+  while ( fscanf(fin,"%f",&o1[nfreq]) != EOF )
+    nfreq++;
+  fclose(fin);
+
+  i1=nfreq;
+  
+
+
+/*set up data sets*/
+
+  Proc_err(0,"creating data sets");
+  i1 = ssleep(2);
+  USELASTPARS
+  TIMES(nfreq)
+#include <inc/make_zero_fid>		/* create zero FID file */
+        STOREPARS("NS",0)
+        
+	/** set SPOFFS2 instead of SFO1**/
+	spoff2 = (double)o1[loopcount1] - o1h;
+	Proc_err(INFO_OPT,"spoff2 = %f\no1 = %f", spoff2, o1h);
+	i1 = ssleep(5);
+	STOREPAR("SPOFFS 2", spoff2)
+	IEXPNO				  
+  END
+
+
+  (void) sprintf(cfile,"%s%s",PathSystemHome(),"/multicyc.acq");
+  if (!(fptr = fopen(cfile,"w")))
+      STOPMSG("Cannot create multicyc.acq control file");
+  fclose(fptr);
+
+/*cycle acquisition through datasets*/
+
+
+  USECURPARS				
+	REXPNO(first)
+	TIMES(nfreq)			
+	    Proc_err(0,"1D TOCSY: acquisition in progress\n\n\
+irradiation point # %d",loopcount1+1);
+	    RGA
+	    ZG
+	    XAU("spoff2title")
+	    XAUP
+	    IEXPNO
+	END
+        if (!(fptr = fopen(cfile,"r")))
+        {
+            (void) sprintf(text,"interrupted by user");
+            STOPMSG(text);
+        }
+        fclose(fptr);
+
+
+
+unlink(cfile);
+
+QUIT

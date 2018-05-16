@@ -1,0 +1,12 @@
+GETCURDATA
+EF
+APKS
+XAU("as_phase1d")
+SREF
+XAU("set_sreglist")
+ABS
+XAU("AS_CYCALC")
+
+AUTOPLOT
+
+QUIT

@@ -1,0 +1,102 @@
+/*** ^^A -*-C++-*- **********************************************/
+/*	au_getlxhco		29.01.1996			*/
+/****************************************************************/
+/*	Short Description :					*/
+/*	AU program for acquisition of sweep width optimized	*/
+/*	XH correlated spectra.					*/
+/****************************************************************/
+/*	Keywords :						*/
+/*	coloc, sweep width optimized XH correlation		*/
+/****************************************************************/
+/*	Description/Usage :					*/
+/*	AU program for acquisition of sweep width optimized	*/
+/*	XH correlated spectra. This version also works when a	*/
+/*	sample changer run was started without processing of	*/
+/*	the acquired data. If the integral range file 'intrng'	*/
+/*	is missing in one or both preparation experiments,	*/
+/*	then the preparation data set is processed with ef,	*/
+/*	apk, sref and abs. The abs command creates a new	*/
+/*	intrng file which is then evaluated by the GETLXHCO	*/
+/*	command. The second dataset corresponds to the F2-,	*/
+/*	the third to the F1-direction of the 2D-experiment.	*/
+/****************************************************************/
+/*	Author(s) :						*/
+/*	Name		: Gabriella Schmidt			*/
+/*	Organisation	: Bruker BioSpin GmbH			*/
+/*	Email		: gabriella.schmidt@bruker-biospin.de	*/
+/****************************************************************/
+/*	Name		Date	Modification:			*/
+/*	gsc		960129	created				*/
+/****************************************************************/
+/*
+$Id: au_getlxhco,v 1.14.2.1 2007/05/30 13:51:33 gsc Exp $
+*/
+
+    char disk_sav[PATH_MAX], user_sav[PATH_MAX],
+	 type_sav[PATH_MAX], name_sav[PATH_MAX];
+    int expno_sav= expno;
+    int procno_sav = procno;
+    char pulprog[PATH_MAX];
+    double in0, d6;
+    float d0, p4, p2;
+    int td1;
+    int PH_mod_status = -1;
+    int FT_mod_status = -1;
+
+    GETCURDATA2;
+    GETCURDATA3;
+
+    FETCHPARS("PH_mod",&PH_mod_status);
+    FETCHPARS("FT_mod",&FT_mod_status);
+
+    (void)strcpy(disk_sav,disk);
+    (void)strcpy(user_sav,user);
+    (void)strcpy(type_sav,type);
+    (void)strcpy(name_sav,name);
+
+    if (PH_mod_status == 0 && FT_mod_status == 0) 
+    {
+	DATASET(name2,expno2,procno2,disk2,user2);
+
+	EF;
+	ERRORABORT;
+
+	APK;
+	SREF;
+	ABS;
+	DATASET(name_sav,expno_sav,procno_sav,disk_sav,user_sav);
+    }
+
+    if (PH_mod_status == 0 && FT_mod_status == 0) 
+    {
+	DATASET(name3,expno3,procno3,disk3,user3);
+
+	EF;
+	ERRORABORT;
+
+	APK;
+	SREF;
+	ABS;
+
+	DATASET(name_sav,expno_sav,procno_sav,disk_sav,user_sav);
+    }
+
+    GETLXHCO;
+    ERRORABORT;
+
+    FETCHPAR("PULPROG", pulprog);
+    if (strcmp (pulprog,"coloc") == 0)
+    {
+	FETCHPAR1("IN 0", &in0);
+	FETCHPAR("D 0",&d0);
+	FETCHPAR("P 4",&p4);
+	FETCHPAR("P 2",&p2);
+	FETCHPAR1("TD",&td1);
+	d6 = d0 + (MAX_OF(p2,p4)) * 1e-6 + td1 * in0;
+	STOREPAR("D 6", d6);
+	STOREPAR("IN 6", in0);
+    }
+
+  //  RGA;
+    ZG;
+    QUIT

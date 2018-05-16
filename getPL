@@ -1,0 +1,59 @@
+/*** ^^A -*-C++-*- **********************************************/
+/*      getPL - get Hadamard peaklist      18.04.2015           */
+/****************************************************************/
+/*      Short Description :                                     */
+/*      AU program to copy peak list for Hadamard experiment    */
+/****************************************************************/
+/*      Keywords :                                              */
+/*      Hadamard, peaklist                        							*/
+/****************************************************************/
+/*      Description/Usage : getPL expno                         */
+/*      will copy peaklist                                      */
+/*      from; expno/pdata/1/peaklist.xml                        */
+/*      to: curexp/PL.xml                                       */
+/*      will set 1 TD to the nearest power of 2                 */
+/*      and increase the dimensionality from 1D to 2D           */
+/****************************************************************/
+/*      Author(s) :                                             */
+/*      Name            : Eriks Kupce                           */
+/*      Organisation    : Bruker BioSpin                        */
+/*      Email           : eriks.kupce@bruker.com                */
+/****************************************************************/
+/*      Name            Date    Modification:                   */
+/*      eku             150418  created                         */
+/****************************************************************/
+
+int  td, npks, expno1;
+char sourcefile[256], targetfile[256];
+
+expno1=expno;
+sprintf(targetfile, "%s/%s/%d/PL.xml", disk, name, expno);  
+if(i_argc < 3) GETINT("Enter peaklist EXPNO:", expno)  
+else expno=atoi(i_argv[2]);
+DATASET(name, expno, 1, disk, user);
+sprintf(sourcefile, "%s/peaklist.xml", PROCPATH(0));  
+npks = readPeakList(PROCPATH(0));
+
+if ( (i1 = dircp (sourcefile,targetfile)) < 0 )
+Proc_err (DEF_ERR_OPT, dircp_err(i1));
+
+td=1;
+if(npks>1)
+{
+  while(td<npks) td*=2;
+}
+
+DATASET(name, expno1, 1, disk, user);
+
+i1=5;
+FETCHPAR("PARMODE", &i1)
+if(i1<1) 
+{
+  XCMD("chparmod A2")	// create 2D data set
+  XCMD("chparmod P2")	// create 2D data set
+  STOREPAR1("TD", td)
+}
+STOREPAR("TD", 4096)
+
+QUIT
+

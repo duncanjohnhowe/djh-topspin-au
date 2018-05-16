@@ -1,0 +1,13 @@
+/*zgcyro with update jup.txt*/
+/*Sean Lynn 11/1/2007 */
+
+float DE;
+
+GETCURDATA;
+XAU("as_juptxt")
+FETCHPAR("DE",&DE);
+STOREPAR("DE",30.0);
+RGA
+STOREPAR("DE",DE);
+ZG
+QUIT;

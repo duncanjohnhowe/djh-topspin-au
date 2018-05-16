@@ -1,0 +1,110 @@
+/*
+
+intregion - integrate region, return integral as AUERR (scaled down by 1000 to hopefully always fit!)
+
+normally call from external au program something like;
+
+sprintf(cmd, "%f %f", <regionstart>, <regionend>);  // in ppm!
+XAU("intregion", "")
+total = AUERR;
+
+
+andrew.gibbs@bruker.co.uk
+20061214
+
+*/
+
+
+char message[255];
+char inname[255];
+char outname[255];
+char cdisk[100], cuser[100], cname[100];
+int cexpno, cprocno;
+int csize;
+int i, start, finish;
+float coffset;
+float cwidth;
+float hzppt, ppmppt;
+float upper, lower;
+float ppmval, hzval;
+double csfo1;
+FILE *file;
+long *ldata;
+double sscale, intensity;
+int readin;
+double total;
+
+GETCURDATA
+
+FETCHPARS("SI", &csize)
+FETCHPARS("SFO1", &csfo1)
+FETCHPARS("OFFSET", &coffset)
+FETCHPARS("SWH", &cwidth)
+
+
+/* get region from command line, or ask! */
+readin = sscanf(cmd, "%f%f", &upper, &lower);
+
+if (readin != 2)
+{
+	upper=coffset; lower=upper-(cwidth/csfo1);
+	GETFLOAT("output from ppm = ", upper);
+	GETFLOAT("to ppm = ", lower);
+}
+
+/* reverse order if entered wrongly! */
+if (lower > upper)
+{
+	hzppt = lower;
+	lower = upper;
+	upper = hzppt;
+}
+
+
+hzppt = cwidth/csize;
+ppmppt = hzppt/csfo1;
+
+start = ((coffset - upper) * csfo1) / hzppt;
+finish = ((coffset - lower) * csfo1) / hzppt;
+
+if (start > csize || start < 0 || finish > csize || finish < 0)
+{
+	printf(" region (%f to %f) not in this dataset!\n", upper, lower);
+}
+else
+{
+	/*get the data */
+	sprintf(inname, "%s/data/%s/nmr/%s/%d/pdata/%d/1r", disk, user, name, expno, procno);
+
+	/* allocate memory for arrays */
+	if ( ( ldata = (long *)malloc( sizeof(long) * csize ) )==NULL )
+	{
+		STOPMSG("Could not allocate memory for data?")
+	}
+	if ( ( file = fopen(inname, "r") ) == NULL)
+	{
+		Proc_err(INFO_OPT, "Could not open data file %s for read - ignored", inname);
+	}
+	else if ( (readin = fread(ldata, sizeof(long), csize, file)) != csize)
+	{
+		Proc_err(INFO_OPT, "read only %d of %d points from %s - ignored", readin, csize, inname);
+		fclose(file);
+	}
+	else
+	{
+		fclose(file);
+
+		{
+			total =0;
+			for (i = start; i <= finish; i++)
+			{
+				total += (double)ldata[i];	/* stored long integer  */
+			}
+		
+		}
+	}
+	free(ldata);
+
+}
+return((int)(total/1000.0));  /* return as integer (AUERR), scaled down by 1000 */
+}

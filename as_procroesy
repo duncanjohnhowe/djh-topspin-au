@@ -1,0 +1,30 @@
+char pdf_Name[PATH_MAX] = "";
+char szFileStatus[20] = "";
+char szTypeOfData[20] = "";
+char cmdstr[200] = "";
+char procnoPath[PATH_MAX] = "";
+
+
+GETCURDATA
+XFB
+XAU("as_phaseroesy")
+XAU("as_projref")
+ABS1
+ABS2
+LEVCALC
+VIEWDATA_SAMEWIN
+//AUTOPLOT
+GetPdfFilePath( pdf_Name, szFileStatus );
+AUTOPLOT_TO_FILE(pdf_Name)
+
+FETCHPAR("PULPROG", szTypeOfData)
+szTypeOfData[5]=NULL;
+UpdateWorkLog( szTypeOfData, pdf_Name, szFileStatus );
+
+//sprintf( procnoPath, "%s/data/%s/nmr/%s/%d/pdata/%d", disk, user, name, expno, procno );
+//i1 = unlinkpr( procnoPath );
+
+QUIT
+
+#include "C:\Bruker\TOPSPIN\exp\stan\nmr\au\src\as_pdf_common.inc"
+#include <inc/sysutil>

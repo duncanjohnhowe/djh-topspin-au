@@ -1,0 +1,12 @@
+char pdfname[512]="d:/disk2/data/service/pdf/";
+
+GETCURDATA;
+DATASET( name, expno, 1, disk, "service");
+XCMD("dpl1");
+sprintf( pdfname, "%s/data/%s/nmr/%s/%d/pdata/%d/%s.emf", disk, user, name, expno, procno, name );
+AUTOPLOT_TO_FILE(pdfname);
+
+sprintf( pdfname, "d:/disk2/data/service/pdf/%s.emf", name );
+AUTOPLOT_TO_FILE(pdfname);
+
+QUIT

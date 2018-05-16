@@ -1,0 +1,4 @@
+GETCURDATA
+Proc_err(INFO_OPT,"user is - %s",user);
+Proc_err(INFO_OPT,"name is :- %s\n expno is : - %i\n procno is :- %i\n disk is :- %s\n user is :- %s\n",name,expno,procno,disk,user);
+QUIT

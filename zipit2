@@ -1,0 +1,67 @@
+/*****************************************/
+/*The default way this is supposed to work is to send an email under automation, at a defined point in the experiment run
+/*i.e. after the dept, but before the cosy...
+/* the way it works is as follows :-
+/* USERP5 contains the processing au program to be used
+/* USERP1 contains the email address  to send it to
+/* AUNMP is set to be p3-pdf-email
+/* In IconNmr at the point you wish to send the email, type in the email to USERP1
+/* The first thing the Au program will do is run the processing defined in UserP5
+/* then it will check for an @ symbol in USERP1, if it finds one it will try and zip the data
+/* (minus the processed data), scan for a pdf in any experiment, and send the first one it finds,
+/* along with the zip file created to the defined email. 
+/* A 'the works' data set is about 11MB zipped.
+/*
+/* When running outside of Iconnmr, it will email the whole data set.
+/* If you don't want it to reprocess the experiment its run from, set USERP5 to null_proc
+
+/*ALL EXTRANEOUS STUFF COMMENTED OUT , SO IT ONLY ZIPS DATASET*/
+
+
+#include <stdio.h>
+#include <inc/sysutil>
+
+
+
+/*the directory to output pdfs to.*/
+char pdfdir[127]="e:/pdf/",pdfname[511]="e:/pdf/";
+char samplename[255], directory[255],snamepath[255]="e:",data_File[127];
+char orig_au[255],proc_au[255];
+char id[127]="camnmrservice@gmail.com", password[127]="pgamdjh2012";
+char email[255],title[255],message[255],body[255]="DO NOT REPLY";
+char archroot[255] = "e:\\zips"; 
+char batfile[127]="e:\\top-copy.bat",batcmd[127]="e:/top-copy.bat";
+char subdir[255], archpath[511], cmd_str[1023]="\n";
+char status1[127]="emailing",status2[127]="done"; 
+int cmdstatus,orig_expno,i_limit,i_exp=1,pdfthere=0;
+FILE *fbat = NULL;
+FILE *sname = NULL;
+
+/*
+
+/*start making zip file*/
+//make path to correct archive directory
+strcpy ( subdir, name);
+sprintf( archpath, "%s\\%s",archroot,subdir);
+/*****************************************************/
+/*SET BELOW TO CORRECT DATA DIR*/
+/**************************************************/
+/*make up a batfile with commands to zip up the data, then run the batch file*/
+sprintf( cmd_str, "robocopy  %s%s\%s /S %s",disk,user,name,archpath); 
+fbat = fopen(batfile, "w");
+fputs( cmd_str, fbat);
+fclose( fbat);
+
+sprintf(cmd_str,"\r\n");
+fbat = fopen(batfile, "a");
+fputs( cmd_str, fbat);
+fclose( fbat);
+
+sprintf( cmd_str,"zip -r -9 %s.zip %s -x \*1r \*1i \*2ii \*2ir \*2ri \*2rr", archpath ,archpath);
+fbat = fopen(batfile, "a");
+fputs( cmd_str, fbat);
+fclose( fbat);
+system(batcmd);
+
+
+QUIT

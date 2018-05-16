@@ -1,0 +1,7 @@
+#!XWinPlot 4.6
+PrinterSetup 0.6 "lp -c -s -n1 %s" "xpsview %s" "PostScript" "A4" 9 0 0 0 0 1 1 1 1
+LayoutSetup 0.2 0
+ObjectList
+DispVersion 1.32
+GC 19 17 0 0 0 f 1 1 31 0 0 0 f 0 0 5 352.777777778 0
+NMREpsi 0 19 (-8.98444252377|91.1071737252) (14810.7251513|12894.7078652) 0 f t 0 ""

@@ -1,0 +1,13 @@
+char titlefile[80], irradtext[80];
+double o2p;
+FILE *ftitle;
+
+GETCURDATA
+FETCHPAR("O2P", &o2p)
+sprintf( titlefile, "%s/data/chemist/nmr/%s/%d/pdata/1/title", disk, name, expno );
+ftitle = fopen( titlefile, "a+");
+sprintf ( irradtext, "\n19F irradiation at %.2f ppm", o2p);
+fputs( irradtext, ftitle);
+fclose( ftitle );
+
+QUIT

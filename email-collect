@@ -1,0 +1,100 @@
+/*****************************************/
+/*Only sends a collection notification to the user; add a pdf if there's one there.*/
+/*MODDED TO ONLY EMAIL ACCORDING TO USERP1
+*/
+
+#include <stdio.h>
+#include <inc/sysutil>
+#include <dos.h>
+
+
+
+/*the directory to output pdfs to.*/
+char pdfdir[127]="e:/pdf/",pdfname[511]="e:/pdf/";
+char samplename[255], directory[255],snamepath[255]="e:",data_File[127];
+char orig_au[255],proc_au[255];
+char id[127]="camnmrservice@gmail.com", password[127]="pgamdjh2012";
+char email[255],title[255],message[255],body[255]="DO NOT REPLY. Your printed spectra for this sample are ready to collect";
+char archroot[255] = "e:\\zips"; 
+char emailedlist[256] = "e:/emailed-list/emailed-list.txt";
+char batfile[127]="e:\\top-copy.bat",batcmd[127]="e:/top-copy.bat";
+char subdir[255], archpath[511], cmd_str[2048]="\n";
+char status1[127]="emailing",status2[127]="done"; 
+char status_string[127]="working";
+char temp_str[2048]="";
+int cmdstatus,orig_expno,i_limit,i_exp=1,pdfthere=0,i;
+FILE *fbat = NULL;
+FILE *sname = NULL;
+FILE *statusprint = NULL;
+
+/*this should stop you having to click ok to go onwards...*/
+XCMD("setdef ackn no")
+XCMD("setdef stderr off")
+XCMD("setdef stdout off")
+/*first thing to do is process the data in the directory we're in*/
+GETCURDATA
+
+/* don't need any of this, as we're just emailing
+FETCHPAR("AUNMP", &orig_au);
+FETCHPAR("USERP5", &proc_au);
+STOREPAR("AUNMP", proc_au) ;
+//CPR_exec(proc_au, WAIT_TERM); //the processing may be time consuming...better wait for it to finish
+//XAUP("proc_au",cmd);
+STOREPAR("AUNMP",orig_au);
+*/
+
+FETCHPAR("USERP1",email)
+/*email[strlen(email)-1]=NULL;*/ //if needed; to strip last char from string
+STOREPAR("USERP3", status1)
+if (strchr(email,'@') == NULL)
+{
+	Proc_err(INFO_OPT, "No email address found");
+	ABORT
+}
+
+sprintf( pdfname, "%s%s/%s/%d/pdata/%d/%s.pdf", disk, user, name, expno, procno,name );
+
+/*now get first pdf of dataset*/
+/*better check there is data there, or we'll infinite loop*/
+(void) sprintf(directory, "%s%s/%s", disk, user, name);
+i_limit = gethighest(directory);
+if (i_limit>999) i_limit=999;
+while (i_exp < i_limit)
+{
+	/*the pdf file created by pdfit has -n.pdf at the end of the filename*/
+	sprintf( pdfname, "%s%s/%s/%d/pdata/%d/%s-1.pdf", disk, user, name, i_exp, procno,name );	 
+	if( access( pdfname, R_OK ) == 0 ) // if there is a pdf there
+		{															
+	  pdfthere=1;
+	//	Proc_err(INFO_OPT,"%s - %i",pdfname,pdfthere);	
+		break;
+		}
+	i_exp++;
+}
+	
+/*Now email the zip, and the pdf if there is one.*/
+/*first create the sendemail command we're going to run*/
+if (pdfthere==1) { 
+	sprintf (cmd_str, "sendemail -f %s -t %s -u %s -m %s -a  %s -s smtp.gmail.com:587 -o tls=yes -xu %s -xp %s", id, email,name, body, pdfname, id, password);
+}
+else	{
+	Proc_err(INFO_OPT, "No pdf found");
+	
+	}
+
+/*write a dos batch file with the cmd_str and run it*/
+fbat = fopen(batfile, "w");
+fputs( cmd_str, fbat);
+fclose( fbat);
+Show_status(cmd_str);
+
+/*send the email*/
+system(batcmd);
+
+
+
+XCMD("setdef ackn ok")
+XCMD("setdef stderr on")
+XCMD("setdef stdout on")
+
+QUIT

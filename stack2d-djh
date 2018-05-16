@@ -1,0 +1,181 @@
+/*** ^^A -*-C++-*- **********************************************/
+/*	stack2d-xwp		16.08.1991			*/
+/****************************************************************/
+/*	Short Description :					*/
+/*	Program to generate a 2D stack plot.			*/
+/****************************************************************/
+/*	Keywords :						*/
+/*	2D stacked plot, XWIN-PLOT				*/
+/****************************************************************/
+/*	Description/Usage :					*/
+/*	Program to generate a 2D stack plot.			*/
+/*	This program allows to choose between 3-15 rows of a 2D	*/
+/*	spectrum. The user is prompted to define the first row 	*/
+/*	(which is used for scaling) and the increment between 	*/
+/*	the rows						*/
+/****************************************************************/
+/*	Author(s) :						*/
+/*	Name		: Clemens Anklin			*/
+/*	Organisation	: Bruker Instruments Inc.		*/
+/*	Email		: nmr-software-support@bruker.de	*/
+/****************************************************************/
+/*	Name		Date	Modification:			*/
+/*	cga		910816	created				*/
+/*	svcu		020628	use XWIN-PLOT instead of plot	*/
+/*	svcu		041001	increase print_to_file options	*/
+/****************************************************************/
+/*
+$Id: stack2d,v 1.9 2004/10/01 15:54:10 svcu Exp $
+*/
+
+
+/*********************************************/
+/*  Define constants  */
+#define TWOD    1
+
+/*********************************************/
+/* variable declarations */
+char portf[PATH_MAX], layoutname[PATH_MAX], sizename[PATH_MAX];
+int first, delta, max, parmod, next, next1, size, ret;
+double f1p2d, f2p2d;
+char xwlay_orig[PATH_MAX]; 
+char emailflag[2];
+
+portf[0]=0;
+
+/*********************************************/
+/*  start portfolio definition  */
+DECLARE_PORTFOLIO
+
+/*********************************************/
+/*  Program only works for 1D datasets  */
+FETCHPAR( "PARMODE", &parmod );
+if ( parmod != TWOD ) STOPMSG( "AU program terminated! \n Not a 1D Dataset" );
+
+
+/*********************************************/
+/* enter 2D data set and stack plot parameters */
+GETCURDATA;
+
+first = 10;
+AUERR = Proc_err (ERROPT_AK_CAN|ERROPT_BEEP_DEF,
+		"Note:\n"
+		"- use row with biggest peak \n"
+		"  as first row (for scaling)\n"
+		"- set plot pars (F1P/F2P)\n"
+		"  before starting this AU program!\n");
+if (AUERR == ERR_CANCEL)
+{
+  ABORT
+}
+
+FETCHPAR( "F1P", &f1p2d );
+FETCHPAR( "F2P", &f2p2d );
+
+
+FETCHPAR1S( "TD", &size );
+sprintf(sizename, "Enter first row (between 1 and %d): ",size);
+GETINT(sizename,first)
+
+delta = 10;
+GETINT("Enter row increment : ",delta)
+
+max = 10;
+GETINT("Enter number of rows (3-15): ",max)
+if (max <3) STOPMSG( "AU program terminated! \n Less than 3 Datasets" );
+if (max >25) STOPMSG( "AU program terminated! \n More than 15 Datasets" );
+if (first+max*delta >size) 
+	{
+	i1 = Proc_err(QUESTION_OPT,"Last rows you choose by calculating\n"
+				   "first row, increment and number of rows\n"
+				   "does not exist in the dataset\n"
+				   "If you continue these rows will\n"
+				   "not be displayed\n"
+				   "Click OK to continue, click cancel stop");
+	if ( i1 == ERR_OK )
+	{
+	/* Further AU statements */
+	}
+	if ( i1 == ERR_CANCEL )
+	{
+	ABORT
+	}
+	}
+
+/*********************************************/
+/* store first row as expno 500 */
+expno2 = expno;
+
+RSER(first,500,1)
+DATASET(name,500,procno,disk,user)
+GETCURDATA
+EFP
+//ABS
+//APK
+STOREPAR("F1P",f1p2d)
+STOREPAR("F2P",f2p2d)
+
+/*********************************************/
+/* store other rows in increasing expnos */
+next = 0;
+TIMES(max-1)
+DATASET(name,expno2,procno,disk,user)
+GETCURDATA
+next += delta;
+RSER(first+next,500+next,1)
+DATASET(name,500+next,procno,disk,user)
+GETCURDATA
+EFP
+//ABS
+//APK
+STOREPAR("F1P",f1p2d)
+STOREPAR("F2P",f2p2d)
+END
+
+/*********************************************/
+/* Create and open portfolio file portf */
+(void) strcpy (portf,(PROCPATH("portf")));
+CREATE_PORTFOLIO(portf)
+
+/*********************************************/
+/* The 1st selected expno is written to the portfolio file */
+ADD_TO_PORTFOLIO(disk,user,name,500,procno) 
+
+next = 500+delta;
+TIMES(max-1)
+ADD_TO_PORTFOLIO(disk,user,name,next,procno)
+next += delta;
+END
+
+/*********************************************/
+/* Close protfolio file */
+CLOSE_PORTFOLIO 
+
+/*********************************************/
+/* store the original layout */
+FETCHPAR("LAYOUT",xwlay_orig)
+
+/*********************************************/
+/* choose the necessary layout for the number of stacked spectra */
+sprintf(layoutname, "+/layouts.stack/stack_%d.xwp",max);
+STOREPAR("LAYOUT",layoutname)
+
+/*********************************************/
+/* Plot with the datasets defined in the portfolio. This  */
+/* command uses the portfolio file specified in the  */
+/* CREATE_PORTFOLIO command   */
+XWINPLOT_WITH_PORTFOLIO
+
+
+/*********************************************/
+/* Adds include file 'printtofile' that manage */
+/* the print to file information	*/
+
+#include <inc/printtofile>
+
+ 
+/*********************************************/
+/* restore the original layout */
+STOREPAR("LAYOUT",xwlay_orig);
+
+QUIT

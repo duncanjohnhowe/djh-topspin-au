@@ -1,0 +1,54 @@
+/*
+Program:	as_cp2archive
+Version:	1.1
+Author:		Sean Lynn
+Date:     30/1/2007
+Description:	copies data to archive
+*/
+
+char archroot[] = "//stvdsntp001/dis-casschemist/nmr/"; 
+char instr[20], subdir[6], archpath[40], filecheck[100], cmd_str[200];
+int cmdstatus;
+
+GETCURDATA
+if (strchr(name, 'PT')) strcpy ( instr, "PT600");
+if (strchr(name, 'AG')) strcpy ( instr, "AG400");
+
+if (strlen(instr) < 3)
+	{
+	Proc_err(DEF_ERR_OPT, "unknown prefix, program aborted");
+	return(0);
+	}
+strcpy ( subdir, name);
+
+subdir[strlen(subdir)-3] = NULL;
+//make path to correct archive directory
+sprintf( archpath, "%s%s/%s/",archroot,instr,subdir);
+sprintf( filecheck, "%s%s/%d/acqu", archpath,name, expno);
+if( access( filecheck, F_OK ) !=0)
+	{
+	//try to copy single expno if dataset exists in archive
+	sprintf( cmd_str, "cp -r %s/data/%s/nmr/%s/%d %s%s/%d",disk,user,name,expno,archpath,name,expno);
+
+	cmdstatus=system( cmd_str );
+	//if this fails try to copy entire dataset
+	if (cmdstatus!=0)
+  	{
+  	sprintf( cmd_str, "cp -r %s/data/%s/nmr/%s %s",disk,user,name,archpath);
+  	cmdstatus=system( cmd_str );	
+  	}
+		if (cmdstatus!=0)
+  	{
+  	Proc_err(INFO_OPT, "archive failed");
+  	}
+	}
+if( access( filecheck, F_OK ) ==0)
+	{
+	sprintf( cmd_str, "cp -r %s/data/%s/nmr/%s/%d %s%s",disk,user,name,expno, archpath,name);
+	cmdstatus=system( cmd_str );	
+  }
+	if (cmdstatus!=0)
+  	{
+  	Proc_err(INFO_OPT, "archive failed");
+  	}
+QUIT

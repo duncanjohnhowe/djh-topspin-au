@@ -1,0 +1,70 @@
+/*** ^^A -*-C++-*- **********************************************/
+/*	au_zgonly		08.04.1998			*/
+/****************************************************************/
+/*	Short Description :					*/
+/*	General AU program for data acquisition.		*/
+/****************************************************************/
+/*	Keywords :						*/
+/*	zg, gradshim, gradient shimming				*/
+/****************************************************************/
+/*	Description/Usage :					*/
+/*	General AU program for data acquisition. No rga is	*/
+/*	done, only zg. This AU program is used by the gradient	*/
+/*	shimming interface 'gradshim'.				*/
+/****************************************************************/
+/*	Author(s) :						*/
+/*	Name		: Mike Engelhardt 			*/
+/*	Organisation	: Bruker Analytik			*/
+/*	Email		: michael.engelhardt@bruker.de		*/
+/****************************************************************/
+/*	Name		Date	Modification:			*/
+/*	eng		980408	created				*/
+/****************************************************************/
+/*
+$Id: au_zgonly,v 1.2 2000/07/12 11:39:40 gsc Exp $
+*/
+int new_exp;
+float deorig, de = 20;
+char pdfname[512]="d:/disk2/data/service/pdf/";
+char titlefile[512], titletext[512], titletextnew[512];
+FILE *ftitle = NULL;
+
+
+
+GETCURDATA
+
+
+/*Now read the title file from the source exp into the titletext variable*/
+sprintf( titlefile, "%s/data/%s/nmr/%s/%i/pdata/1/title", disk, user, name, expno);
+ftitle = fopen( titlefile, "r");
+fgets( titletext, 512, ftitle);
+fclose( ftitle);
+
+/*convert the data to analogue in the dataset n+5000, and process it*/
+new_exp=expno+5000;
+
+VIEWDATA_SAMEWIN
+CONVDTA(new_exp)
+expno=new_exp;
+VIEWDATA_SAMEWIN
+EFP
+APK
+ABS
+XMAC("service-1h-mac")
+GETCURDATA
+XCMD("as_cycalc")
+/*now write out a title file with variable contents of the variable titletext and a bit of description of whats been done*/
+
+sprintf( titlefile, "%s/data/%s/nmr/%s/%i/pdata/1/title", disk, user, name, new_exp);
+
+sprintf( titletextnew, " Data is has been converted to analogue. Processed automatically" );
+/*strcpy(titletext, titletextnew);
+ */
+ftitle = fopen( titlefile, "a");
+fputs( titletext, ftitle);
+fputs( titletextnew, ftitle);
+fclose( ftitle);
+
+sprintf( pdfname, "%s/data/%s/nmr/%s/%d/pdata/%d/%s.pdf", disk, user, name, expno, procno, name );
+AUTOPLOT_TO_FILE(pdfname);
+QUIT

@@ -1,0 +1,176 @@
+/*--------------------------------------------------------------*/
+/* Title	: Program as_reproc				*/
+/* Date	: 20/12/2006					*/
+/* Version	: 1.1						*/
+/* Author	: John Hollerton & Sean Lynn				*/
+/* Contents	: Main program					*/
+/*--------------------------------------------------------------*/
+/* Description	:						*/
+/*		  Allows reprocessing of spectra aquired 	*/
+/*		  with JCH PC control program.			*/
+/*								*/
+/* External module : None.					*/
+/* Internal module : None.					*/
+/*								*/
+/* This revision reads the defaults from a file...		*/
+/* This version works on IRIX6.3+ or WinNT!!!!			*/
+/*--------------------------------------------------------------*/
+
+#define RETRY_TIME 10 		/*Process sleep time in seconds*/
+
+char    prefix[10], shimset[20], defaultsfile[80], diskunit[10];
+char    reprodfile[80], repready[80], tmp_str[100], in_data[100];
+char	   tunefile[100], specno[20];
+char   *env_name, *file_data, *field, *ed;
+char pdf_Name[PATH_MAX] = "";
+char szFileStatus[20] = "";
+char szTypeOfData[20] = "";
+char cmdstr[200] = "";
+char arg1[32],arg2[32];
+char command[100];
+int dohardcopy;
+int ret;
+int     rephase, expansions, curloop, finish;
+int pid;
+float   rescale; 
+double cy;
+FILE   *frprod = NULL, *frpready = NULL, *fdef = NULL;
+FILE   *fproclock = NULL;
+strcpy(arg1,"blank");
+strcpy(arg2,"blank");
+dohardcopy=1;
+
+ret=sscanf(cmd,"%s %s",arg1,arg2);
+if (strcmp(arg1, "nohc")==0) dohardcopy=0;
+
+
+/*--------------------------------------------------------------*/
+/*--- Get defaults from the defaults file ----------------------*/
+strcpy( defaultsfile, "c:/chemist/defaults.txt" );
+Proc_err ( INFO_OPT, "Reprocessor started...");
+sleep(2);
+fdef = fopen( defaultsfile, "r" );
+fgets( prefix, 10, fdef );
+fgets( diskunit, 10, fdef );
+fgets( tunefile, 20, fdef );
+fgets( shimset, 20, fdef );
+fclose( fdef );
+Proc_err ( INFO_OPT, "Defaults read...");
+sleep(2);
+/*--------------------------------------------------------------*/
+/*--- Remove the trailing LF -----------------------------------*/
+prefix[strlen(prefix)-1]=NULL;
+diskunit[strlen(diskunit)-1]=NULL;
+tunefile[strlen(tunefile)-1]=NULL;
+shimset[strlen(shimset)-1]=NULL;
+/*--------------------------------------------------------------*/
+
+/*--------------------------------------------------------------*/
+/*--- Assign filenames for signalling --------------------------*/
+strcpy ( reprodfile, "c:/chemist/reprod.txt" );
+
+//kill old process if present
+if ( (fproclock = fopen("c:/chemist/reproclock.txt", "rt") )!= NULL)
+  {
+  fscanf(fproclock, "%d", &pid);
+  if (pid > 1) 
+    {
+    sprintf(command, "kill %d", pid);
+    CPR_exec(command, CONT_EX);
+    }
+  fclose(fproclock);
+  }
+//get current PID and put into c:/chemist/reproclock.txt
+pid = _getpid();
+if ( (fproclock = fopen("c:/chemist/reproclock.txt", "wt") )!= NULL)
+  {
+	fprintf(fproclock, "%d\n", pid);
+  fclose(fproclock);
+  }
+
+finish = FALSE;
+while ( finish != TRUE )
+{
+	/*--- Start main loop ---*/
+	sleep(2);
+	/*------------------------------------------------*/
+	if (access(reprodfile, R_OK)!=0)
+	{
+		sleep( 10 );
+		curloop++;
+		continue;
+	}
+	/*--- Reset the loop counter ---------------------*/
+	curloop=1;
+	/*------------------------------------------------*/
+	/*---Read the data string from the file ----------*/
+	sleep(1);
+	frprod = fopen(reprodfile, "r");
+	file_data = fgets(in_data, 100, frprod);
+	fclose( frprod );
+
+	/*---and clean up after you ----------------------*/
+	sprintf( tmp_str, "rm %s", reprodfile );  
+        	system ( tmp_str );
+       	 
+	/*--- Now extract the data -----------------------*/
+	/*--- Spectrum Number, rephase, expansions, rescale ---*/
+	/*---    string         int         int      float  ---*/
+	field = strtok( in_data, ",");
+	strcpy( specno, field );
+	field = strtok( NULL, "," );
+	sscanf( field, "%d", &rephase );
+	field = strtok( NULL, "," );
+	sscanf( field, "%d", &expansions );
+	field = strtok( NULL, "," );
+	sscanf( field, "%f", &rescale );
+	Proc_err ( INFO_OPT, "Reprocessing: %s", in_data);
+	
+	/*--- Now do the reprocessing -------------------*/
+	DATASET( specno, 10, 1, diskunit, "chemist")
+	GETCURDATA
+
+	/*--- Re-transform the data ---------------------*/
+	EM
+	FT
+
+	/*--- Rephase using APKS if required -------------*/
+	if (rephase==1) APKS
+	if (rephase==0) PK
+	ABS
+
+	/*--- Now set CY as desired and plot -------------*/
+	FETCHPAR("CY", &cy)
+	cy = cy*rescale;
+	STOREPAR("CY", cy)
+
+	/*--- Plot the expansions if requested -----------*/
+
+	if (expansions==1) 
+	{
+    STOREPAR("layout", "+/as_1hexp.xwp")
+    if (dohardcopy==1) 
+    {AUTOPLOT}
+    AUTOPLOT_TO_FILE("1d_exp.pdf")
+	}
+
+  STOREPAR("layout","+/as_1h.xwp")
+  if (dohardcopy==1) 
+    {AUTOPLOT}
+  AUTOPLOT_TO_FILE("1d.pdf")
+
+
+GetPdfFilePath( pdf_Name, szFileStatus );
+
+sprintf( cmdstr, "pdftk 1d.pdf 1d_exp.pdf cat output %s dont_ask ", pdf_Name );
+system( cmdstr );
+
+FETCHPAR("PULPROG", szTypeOfData)
+szTypeOfData[5]=NULL;
+UpdateWorkLog( szTypeOfData, pdf_Name, szFileStatus );
+
+STOREPAR( "layout", "+/as_1h.xwp")
+}
+QUIT
+
+#include "C:\Bruker\TOPSPIN\exp\stan\nmr\au\src\as_pdf_common.inc"

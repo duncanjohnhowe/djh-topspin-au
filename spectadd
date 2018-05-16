@@ -1,0 +1,80 @@
+/*** ^^A -*-C++-*- **********************************************/
+/*	fidadd			01.11.1997			*/
+/****************************************************************/
+/*	Short Description :					*/
+/*	AU program to add up FID's in incremented expno's	*/
+/****************************************************************/
+/*	Keywords :						*/
+/*	add fid							*/
+/****************************************************************/
+/*	Description/Usage :					*/
+/*	AU program to add up FID's in incremented expno's e.g.	*/
+/*	from "multizg"-run. The AU program can be started on	*/
+/*	any dataset, the first expno should be entered when	*/
+/*	prompted for (!) The highest expno, which is created	*/
+/*	by this program contains the result from the addition.	*/
+/*	The total number of scans is updated in the result.	*/
+/****************************************************************/
+/*	Author(s) :						*/
+/*	Name		: Stefan Steuernagel			*/
+/*	Organisation	: Bruker BioSpin GmbH			*/
+/*	Email		: stefan.steuernagel@bruker.de		*/
+/****************************************************************/
+/*	Name		Date	Modification:			*/
+/*	ste		971101	created				*/
+/****************************************************************/
+/*
+$Id: fidadd,v 1.6 2005/07/14 08:30:44 wem Exp $
+*/
+
+  int  orig, newexpno, scans, totscans=0;
+  char dirname[PATH_MAX];
+
+#include <inc/getdataset>
+
+  orig = 2;
+  i1 = expno;
+
+  do
+    (void)sprintf(dirname,"%s%s/%s/%d/fid",disk,user,name,i1++);
+  while(access(dirname, F_OK) == 0);
+
+  newexpno = i1 - 1;
+  do
+    (void)sprintf(dirname,"%s%s/%s/%d",disk,user,name,newexpno++);
+  while(access(dirname, F_OK) == 0);
+
+  newexpno--;
+  i1 -= orig + 1;
+  if (i1 < 2)
+    STOPMSG("At least 2 spectra required.")
+
+  GETINT("Enter number of spectra:", i1);
+  if (i1 < 2)
+    STOPMSG("At least specta required.")
+
+  WRA(newexpno)
+
+  TIMES(i1)
+	SETCURDATA
+	FETCHPARS("NS",&scans)
+	totscans += scans;
+	IEXPNO
+  END
+
+  DATASET(name, newexpno, procno, disk, user)
+  STOREPAR("DC",1.0)
+  STOREPARS("NS",totscans)
+  STOREPAR("TI","result of fidadd")
+  STOREPARS("TI","result of fidadd")
+
+  TIMES(i1-1)
+	DATASET2(name, expno, newexpno, disk, user)
+	DATASET3(name, expno, ++orig, disk, user)
+	ADD
+  END 
+
+  VIEWDATA
+  Proc_err(DEF_ERR_OPT, "--- %d FID's added with\n"
+			"    total of %d scans ---", i1, totscans);
+  QUIT

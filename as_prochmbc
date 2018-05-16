@@ -1,0 +1,24 @@
+/* ========================================================================== */
+/*
+title:	as_prochmbc
+author:	Sean Lynn
+description:	autoprocesses hmbc chooses layout
+/*
+/* ========================================================================== */
+GETCURDATA
+XMAC("2dp")
+XF2M
+XAU("as_projref")
+//check for 13c and set layout accordingly
+GETCURDATA3
+if ( expno3 == expno )
+	{
+	STOREPAR("layout", "+/hmqc.xwp")
+	}
+if ( expno3 != expno)
+	{
+	STOREPAR("layout", "+/hmqc.xwp")
+	}
+LEVCALC
+
+QUIT

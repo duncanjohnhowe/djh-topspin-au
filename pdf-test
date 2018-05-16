@@ -1,0 +1,3 @@
+GETCURDATA
+AUTOPLOT_TO_FILE("c:/pdf-out.pdf")
+QUIT

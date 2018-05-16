@@ -1,0 +1,22 @@
+char pdf_Name[PATH_MAX] = "";
+char szFileStatus[20] = "";
+char szTypeOfData[20] = "";
+char cmdstr[200] = "";
+char procnoPath[PATH_MAX] = "";
+char pdfname[PATH_MAX]="";
+
+GETCURDATA
+
+XAU("serv_projref",cmd)
+XAU("service_phase_noesy",cmd)
+ABS1
+ABS2
+LEVCALC
+STOREPAR("layout", "+/service-noesy.xwp")
+
+
+sprintf( pdfname, "c:/nmr-pdf/%s-noesy.pdf", name );
+AUTOPLOT_TO_FILE(pdfname);
+
+/*sleep(5);*/
+QUIT

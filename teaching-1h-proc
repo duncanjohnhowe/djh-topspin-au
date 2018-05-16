@@ -1,0 +1,48 @@
+float pphigh=25.0;
+float pplow=-10.0;
+float plothigh=10.0;
+float plotlow=-0.1;
+char titlefile[512], titletext[512], titletextnew[512]; 
+char pdfname[512]="d:/disk2/data/service/pdf/";
+FILE *ftitle = NULL; 
+
+GETCURDATA;
+/*XMAC("service-1h-mac")*/
+XCMD("efp");
+XCMD("apks");
+XCMD("abs");
+XCMD("apk");
+XCMD("abs");
+STOREPAR("f1p",pphigh);
+STOREPAR("f2p",pplow);
+PP
+XCMD("as_phase1d");
+XCMD("abs");
+XCMD("djh_as_cycalc");
+STOREPAR("MI",0.5);
+PP
+
+STOREPAR("f1p",plothigh);
+STOREPAR("f2p",plotlow);
+
+DATASET( name, expno, 1, disk, "service");
+
+sprintf( titlefile, "%s/data/%s/nmr/%s/%i/pdata/1/title", disk, user, name, expno); 
+sprintf(titletextnew, "\n%s\n", name);
+ftitle = fopen( titlefile, "a");
+fputs( titletext, ftitle); /*put orig title back in*/
+fputs( titletextnew, ftitle); /*add new text to it*/
+fclose( ftitle);
+
+sprintf( pdfname, "%s/data/%s/nmr/%s/%d/pdata/%d/%s.emf", disk, user, name, expno, procno, name );
+AUTOPLOT_TO_FILE(pdfname);
+sprintf( pdfname, "%s/data/%s/nmr/%s/%d/pdata/%d/%s.pdf", disk, user, name, expno, procno, name );
+AUTOPLOT_TO_FILE(pdfname);
+
+XCMD("px-pdf");
+
+
+
+QUIT
+
+

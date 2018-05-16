@@ -1,0 +1,90 @@
+/*****************************************************************/
+/*      nusPGSv3              2013.11.28 (Turkey day!)           */
+/*****************************************************************/
+/*      Short Description :   NUS Poisson Gap Sampler for        */
+/*			      Topspin 3.0+ v3.0                  */
+/*****************************************************************/
+/*      Keywords :                                               */
+/*****************************************************************/
+/*      Description/Usage :   Macro - just run nusPGSv3 and      */
+/*                            follow instructions                */
+/*****************************************************************/
+/*      Author(s) :                                              */
+/*      Name            : Scott Anthony Robson                   */
+/*      Organisation    : Harvard Medical School                 */
+/*      Email           : Scott_Robson@hms.harvard.edu           */
+/* Duncan Howe, Univ Cambridge UK				*/
+/* Added a lot of mods...					*/
+/* saves parameters used to a file.				*/
+/* Takes command line options :-				*/
+/* djh-possion default - uses some default values, eg 25% NUS	*/
+/* djh-possion recalc - takes parameters saved in a file and 	*/
+/* re-does the calculation					*/
+/* Stores parmeters NusSeed, NusAmount and NusPoints 		*/
+/* into the dataset						*/
+/* Makes the filename of the NUS list :- nusTIMEINUNIXSECONDS	*/
+/* This prevents over-writing in an iconnmr automation setting	*/
+/* Fixed an issue where if fnmode=QF and incorrect schedule is  */
+/* generated. So if fnmode=0 (QF) use TD, otherwise use 0.5*TD  */
+
+
+/*****************************************************************/
+/*      Name            Date    Modification:                    */
+/*	SAR		131128  Added Shuffled schedule option   */
+/*      SAR             131128  Cleaning this code up            */
+/*				Macro name change to nusPGS      */
+/*      SAR             130915  Edits of code based on W Bermel  */
+/*                              nls2_setup4.be macro             */
+/*	DJH		170203  The above edits			*/
+/*****************************************************************/
+/*
+$Id: $
+*/
+#include <time.h>
+
+#define MAXDIM 8
+
+//DJH adding writing the arguments to a file.
+char infile[PATH_MAX], outfile[PATH_MAX], outfile2[PATH_MAX], argumentfile[PATH_MAX];
+char result[PATH_MAX];
+char input[PATH_MAX], path[PATH_MAX];
+char nuslist[PATH_MAX];
+char ct_inp[4][MAXDIM];
+char sparse[32];
+char time_in_seconds[64];
+
+
+char *cp, *ep;
+
+const char* args[4];
+
+double lw[MAXDIM], j_coup[MAXDIM];
+
+float swh_a, swh[MAXDIM];
+float tolerance,  working_tolerance;
+float def_tolerance=0.01;
+int parmode, counter, temp,fnmode;
+int td[MAXDIM], td_sparse, td_max, sinep , shuffle_flag, d_one, d_two, d_three;
+int seed=-1;
+int def_seed=54321;
+int def_sinep=2;
+float def_sparsity=25.0;
+float sparsity_pc=0.0;
+FILE *fpi, *fpo, *fpa;
+sparsity_pc=def_sparsity;
+
+
+//Get the current time in seconds for the nuslist filename
+long int tval[MAXDIM];
+sprintf(time_in_seconds,"%d",(int)time(NULL));
+Proc_err(INFO_OPT,"time_in_seconds is - %s",time_in_seconds);
+
+/***** get dataset *****/
+
+GETCURDATA
+
+
+FETCHPAR("PARMODE",&parmode)
+FETCHPAR1("FNMODE", &fnmode)
+Proc_err(INFO_OPT,"fnMode is - %i",fnmode);
+QUITMSG("finished")

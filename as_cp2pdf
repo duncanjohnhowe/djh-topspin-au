@@ -1,0 +1,22 @@
+/*
+Program:	as_cp2pdf
+Version:	1.0
+Author:		Sean Lynn
+Date:     25/1/2007
+Description:	Create PDF in archive (\\stvdsntp001\dis-elnb-printpdf).
+*/
+
+char pdf_Name[PATH_MAX] = "";
+char szFileStatus[20] = "";
+char szTypeOfData[20] = "";
+
+GETCURDATA
+
+GetPdfFilePath( pdf_Name, szFileStatus );
+AUTOPLOT_TO_FILE(pdf_Name)
+FETCHPAR("PULPROG", szTypeOfData)
+szTypeOfData[5]=NULL;
+UpdateWorkLog( szTypeOfData, pdf_Name, szFileStatus );
+QUIT
+
+#include "C:\Bruker\TOPSPIN\exp\stan\nmr\au\src\as_pdf_common.inc"

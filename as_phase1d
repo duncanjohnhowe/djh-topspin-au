@@ -1,0 +1,58 @@
+char a[200],path[200];
+float PPI,ppmax,ppmin,hsr;
+int ppminneg,i;
+FILE *fptr;
+
+GETCURDATA
+
+APKS
+
+STOREPAR("PC", 1.5)
+STOREPAR("ASSFAC", 0)
+STOREPAR("CY", 100.0)
+STOREPAR("F1P",15.0)
+STOREPAR("F2P",-0.5)
+STOREPAR("MI",1.0)
+STOREPAR("PSCAL",4)
+STOREPAR("PSIGN",2)
+
+PPP;	
+XCMD("sendgui convertpeaklist txt")
+(void)sprintf(path,"%s%s/%s/%d/pdata/%d/peak.txt",disk,user,name,expno,procno);
+fptr=fopen(path,"r");
+if (fptr==NULL)
+  {
+  Proc_err(DEF_ERR_OPT,"peakfile not found");
+  STOP
+  }
+//Get the peak file header information
+TIMES(4)
+  fgets(a,120,fptr);
+END
+
+//Read the peaks from the peak pick file
+ppmax=0.0;
+ppmin=1000.0;
+for (i=1;i<=1000;i++)
+{
+  if(fscanf(fptr,"%*d %*f %*f %*f %f",&PPI)<1)
+     {
+     break;
+     }
+     else
+     {
+        if (PPI<ppmin) ppmin=PPI;
+        if (PPI>ppmax) ppmax=PPI;
+       // Proc_err(INFO_OPT, "ppmin = %f \nppmax = %f ", ppmin, ppmax);
+       // sleep(1);
+     }
+}
+close(fptr);
+ppminneg=0;
+if (ppmin<0) ppminneg=1;
+ppmin=ppmin*ppmin;
+ppmax=ppmax*ppmax;
+if ((ppmin>ppmax)&&(ppminneg=1)) APK;
+
+
+QUIT

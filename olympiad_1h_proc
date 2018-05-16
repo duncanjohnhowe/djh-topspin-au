@@ -1,0 +1,28 @@
+float cdcl3sino; 
+float peak1sino;
+float peak2sino;
+float peak3sino;
+int nexpt;
+char tmp_str[180], waitfile[80], titlefile[256], titletext[512],tmp_fname[100],diskunit[40], pdfname[]="d:/disk2/data/olympiad/pdf/";
+FILE *ftitle = NULL;
+
+XMAC("olympiad-1h-mac")
+
+GETCURDATA;
+DATASET( name, expno, 1, disk, "olympiad");
+
+sprintf( titlefile, "%s/data/%s/nmr/%s/%i/pdata/1/title", disk, user, name, expno);
+sprintf(titletext, "%s\n", name);
+ftitle = fopen( titlefile, "w");
+fputs( titletext, ftitle);
+fclose( ftitle);
+
+sprintf( pdfname, "%s%s_%d.pdf", pdfname, name, expno);
+
+XCMD("autoplot");
+/*XCMD("as_cp2pdf");*/
+AUTOPLOT_TO_FILE(pdfname);
+
+QUIT
+
+

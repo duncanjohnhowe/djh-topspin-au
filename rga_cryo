@@ -1,0 +1,8 @@
+float deorig, de = 20;
+
+GETCURDATA
+FETCHPAR ("DE", &deorig)
+STOREPAR ("DE", de)
+RGA
+STOREPAR("DE", deorig)
+QUIT
