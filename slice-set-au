@@ -5,16 +5,16 @@
 /*201803 - Added gradient duty cycle calculation                              */
 /*20180418 -in progress- adding debug option                                  */
 /*         - removed logic to keep slice increment less than irradiation pulse*/
-/*         - added info text                                                  */ 
+/*         - added info text                                                  */
 /*20180419 - bandwidth of shaped pulse obtained from source exp               */
 /*         - P1 obtained from source exp                                      */
-/*20180515 - Added option to excape from debug mode                           */
+/*20180515 - Added option to escape from debug mode                           */
 
 #include <math.h>
 
 /*Flags - set them to 0 to turn off                                           */
 /************************************************************************************/
-int debug=1; //if set to 1, no aquisition will run. Useful for test purposes 
+int debug=1; //if set to 1, no acquisition will run. Useful for test purposes
 int disclaimer=1;
 int infomsg=1;
 /************************************************************************************/
@@ -23,7 +23,7 @@ int infomsg=1;
 int num_slices = 10;
 int exp_scans = 1;
 int loop = 0;
-int temp_exp_num = 999; //This is where the 1D aquisitions go
+int temp_exp_num = 999; //This is where the 1D acquisitions go
 int result_exp = 899; //This is where the result goes. Set to the experiment called from further down. 899 is popt default.
 int tmp_int=10;
 int choice_ok = 0;
@@ -89,11 +89,11 @@ i1 = Proc_err(QUESTION_OPT,"THIS PROGRAM IS DISTRIBUTED IN THE HOPE THAT IT WILL
 WITHOUT ANY WARRANTY.\n IT IS PROVIDED 'AS IS' WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESSED OR IMPLIED,\n \
 INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTY OF FITNESS FOR A PARTICULAR PURPOSE.\n \
 THE ENTIRE RISK AS TO THE QUALITY AND PERFORMANCE OF THE PROGRAM IS WITH YOU.\n \
-SHOULD THE PROGRAM PROVE DEFECTIVE, YOU ASSUME THE COST OF ALL NECESSARY SERVICING,\n \ 
+SHOULD THE PROGRAM PROVE DEFECTIVE, YOU ASSUME THE COST OF ALL NECESSARY SERVICING,\n \
 REPAIR OR CORRECTION.\n\n \
 IN NO EVENT WILL THE AUTHOR BE LIABLE TO YOU FOR DAMAGES, INCLUDING ANY GENERAL,\n \
 SPECIAL, INCIDENTAL OR CONSEQUENTIAL DAMAGES ARISING OUT OF THE USE OR INABILITY\n \
-TO USE THE PROGRAM (INCLUDING BUT NOT LIMITED TO LOSS OF DATA OR DATA BEING RENDERED\n \ 
+TO USE THE PROGRAM (INCLUDING BUT NOT LIMITED TO LOSS OF DATA OR DATA BEING RENDERED\n \
 INACCURATE OR LOSSES SUSTAINED BY YOU OR THIRD PARTIES OR A FAILURE OF THE PROGRAM\n \
 TO OPERATE WITH ANY OTHER PROGRAMS), EVEN IF THE AUTHOR HAS BEEN ADVISED OF THE \n \
 POSSIBILITY OF SUCH DAMAGES.\n\n \
@@ -112,7 +112,7 @@ if (infomsg == 1)
 {
 	Proc_err(INFO_OPT,"This program will run a loop of 1D experiments; adding each one into a pseudo 2D dataset.\n \
 		It was designed to build a quick 'map' of a tube, based on either 1H or 19F observe, to get the parameters for \n \
-		the 'best' layer to perform a longer 1D aquisition. \n \
+		the 'best' layer to perform a longer 1D acquisition. \n \
 		It will examine the dataset it is run from to determine the nuclei. It uses the wavemaker software to calculate \n \
 		the power level of the shaped pulse involved. Some default values and logic are included to try and ensure the pulse length \n \
 		and power, as well as the gradient duty cycle are within limits. However I can't stress strongly enough; check before use!!! \n \
@@ -127,23 +127,23 @@ if (infomsg == 1)
 - Run a quick 1D experiment of the nuclei you wish to observe; setting the O1P, sweepwidth etc as needed. \n  \
 - Run this au program and answer the questions. \n \n\
 This AU program will read in the parameter sets, use wavemaker to calculate the shaped pulse and run a succesion of 1D experiments. \n \
-Note, THERE IS NO EASY WAY TO ABORT THE EXPERIMENT OTHER THAN QUITING TOPSPIN!!! \n \
+Note, THERE IS NO EASY WAY TO ABORT THE EXPERIMENT OTHER THAN QUITTING TOPSPIN!!! \n \
 The pseudo 2D result can be processed with the command XF2M. You can then go to the expno %i do 'edc' to create another 1D experiment and set 'spoffs1' to run a desired slice with more scans.\n ",temp_exp_num);
 	}
-			
-			
+
+
 }
 
-		
+
 if(debug=1)
 {
-	GETSTRING("Flag set to debug mode. No aquisition will be run. Do you want to switch to switch to aquisition mode? (yes/no",tmpstr);
+	GETSTRING("Flag set to debug mode. No acquisition will be run. Do you want to switch to switch to aquisition mode? (yes/no",tmpstr);
 	if ( !strcmp(tmpstr,"yes") )
 	{
 		debug=0;
 	}
 }
-	
+
 
 FILE *ftitle = NULL;
 /*Get the parameters of what nuclei, sw etc from current dataset*/
@@ -173,7 +173,7 @@ if( (bandwidth_hz < bandwidth_hz_lower_limit) || (bandwidth_hz > bandwidth_hz_up
 	Proc_err(DEF_ERR_OPT, "Bandwidth desired %f, exceeds limits of %f to %f. Check source experiment.\n Aborting...",bandwidth_hz, bandwidth_hz_lower_limit, bandwidth_hz_upper_limit);
 	ABORT
 } else
-	
+
 {
 	Proc_err(DEF_ERR_OPT, "Bandwidth obtained from source experiment = %fHz ",bandwidth_hz);
 }
@@ -184,7 +184,7 @@ while (choice_ok != 1) //have to get one thing correct...
 {
 	choice_ok = 0;
 	GETFLOAT("What offset in hz away from 0 to takes slices over. At 500MHz, with 1H a 50% gradient, and slice bandwidth of 5000, 166666 is the maximum",offset_hz);
-	if ( (offset_hz < 0) || (offset_hz > max_offset) ) 
+	if ( (offset_hz < 0) || (offset_hz > max_offset) )
 	{
 		Proc_err(INFO_OPT, "%f seems wrong or outside defaults, try again",offset_hz);
 	}
@@ -199,7 +199,7 @@ while (choice_ok != 1) //have to get one thing correct...
 	else {
 		choice_ok++;
 	}
-*/	
+*/
 }
 
 choice_ok = 0; //in case we want to use this method again
@@ -210,7 +210,7 @@ while (choice_ok != 1) //have to get one thing correct...
 {
 	choice_ok = 0;
 	GETINT("Number of slices on either side of zero",tmp_int);
-	
+
 	if ( ( (tmp_int < 0) || (tmp_int > max_slices) ) )
 		{
 		Proc_err(INFO_OPT, "%i is a crazy number, try again",tmp_int);
@@ -229,8 +229,8 @@ while (choice_ok != 1) //have to get one thing correct...
 		else {
 		     choice_ok++;
 		}
-*/	
-	
+*/
+
 }
 choice_ok = 0; //in case we want to use this method again
 num_slices = (tmp_int *2)+1; //we want it to go through 0 really
@@ -337,7 +337,7 @@ GETCURDATA
 sprintf( titlefile, "%s%s/%s/%i/pdata/1/title", disk, user, name, result_exp);
 sprintf( tmpstr, "Slice selective NMR.  \nNo. Slices - %i\nIrradiation bandwidth in Hz - %f\nGradient strength percent - %f", num_slices, bandwidth_hz, exp_gradient );
 ftitle = fopen( titlefile, "w");
-	fputs( tmpstr, ftitle);	
+	fputs( tmpstr, ftitle);
 fclose( ftitle );
 //Logfile of whats been done
 sprintf( logfile,"%s%s/%s/%i/slice-log.csv", disk, user, name, result_exp);
@@ -396,16 +396,16 @@ TIMES(num_slices) //we want it to go through 0 really
 	if (debug==0)
 	{
 		ZG
-	} 
+	}
 	else
-	{	
+	{
 		Proc_err(INFO_OPT,"In debug mode, no aquisition run. %s",tmpstr);
 	}
-	
+
 	//Write spoffs user for this slice to title file
 	WSER(loop,name,result_exp,1,disk,user)
 	ftitle = fopen( titlefile, "a");
-		fputs( tmpstr, ftitle);	
+		fputs( tmpstr, ftitle);
 	fclose( ftitle );
 	//Now write into a log file, csv.
 	sprintf(tmpstr,"%i,%f\n",loop,offset_hz);
@@ -424,6 +424,3 @@ DATASET(name,result_exp,1,disk,user) //go back to datset called from with the wr
 VIEWDATA_SAMEWIN
 
 QUIT
-	
-
-
