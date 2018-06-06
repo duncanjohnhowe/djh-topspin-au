@@ -39,7 +39,7 @@ Proc_err(INFO_OPT,"left = %f, right = %f, step = %f, chunks = %i",left,right,ste
 
 absf1 = left;
 
-while (absf1 > right)
+while (absf2-step > right)
 
 {
 
