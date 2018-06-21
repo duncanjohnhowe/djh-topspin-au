@@ -14,6 +14,10 @@ i_expno=1;
 Hsr=0.0;
 Csr=0.0;
 
+XCMD("setdef ackn no");
+XCMD("setdef stdout no");
+XCMD("setdef stderr no");
+
 GETCURDATA
 dexpno = expno;
 
@@ -84,5 +88,8 @@ while (i_expno < i_limit)
  	i_expno++;
 }
 
+XCMD("setdef ackn yes");
+XCMD("setdef stdout yes");
+XCMD("setdef stderr yes");
 
 QUIT
