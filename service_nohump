@@ -4,12 +4,14 @@
 
 /*now takes a command line argument*/
 /*update jan 2018; prints info and correction/adjustment to calculation*/
+/*update jun 2018; fix bug of unitialised absf2 and type difference between absf1,2 and left,right etc*/
+/*cuased compiler/system errors, would do any correction or stop before the end...*/ 
 
 
 
 double SW,O1P,left,right,step;
 
-float absf1, absf2;
+double absf1, absf2;
 
 int chunk=13;
 
@@ -38,15 +40,15 @@ Proc_err(INFO_OPT,"left = %f, right = %f, step = %f, chunks = %i",left,right,ste
 //...and walk through the spectrum optimising the baseline in chunks
 
 absf1 = left;
-
-while (absf2-step > right)
+absf2 = left;
+// Proc_err(INFO_OPT,"asf1=%f, absf2=%f",absf1,absf2);
+while (absf2-step >= right)
 
 {
 
   absf2 = absf1-step;
-
+//  Proc_err(INFO_OPT,"asf1=%f, absf2=%f",absf1,absf2);
   STOREPAR("ABSF1", absf1)
-
   STOREPAR("ABSF2", absf2)
 
   ABSF

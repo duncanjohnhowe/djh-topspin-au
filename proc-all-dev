@@ -54,7 +54,7 @@ TIMES(i1)
   sprintf(exp_path, "%s%s/%s", disk, user, exp_name);
   i_limit = gethighest(exp_path);
   i_limit = i_limit-1;
-  
+
   i_expno = 1;
  //Proc_err(INFO_OPT, "%s", exp_name);
  DATASET(exp_name, i_limit, 1, disk, user)
@@ -83,7 +83,7 @@ while (i_expno <= i_limit)
 }
 END
 XCMD("setdef ackn ok");
-XCMD("setdef stdout yes");
+XCMD("setdef stdout off");
 XCMD("setdef stderr on");
 
 QUIT
