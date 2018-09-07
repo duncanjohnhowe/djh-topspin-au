@@ -2,6 +2,9 @@
 /*puts the jcamp file in a folder called jcamp above the working data directory*/
 /*this jcamp directory must exist before the program is called*/
 /*djh35@cam.ac.uk June 2016*/
+/*extensive mods thorugh to july 2018*/
+/*options for what type of jcamp, and to copy to the dataset or not.*/
+
 #include <stdio.h>
 #include <string.h>
 #include <inc/sysutil>
@@ -12,15 +15,17 @@ char exp_name[PATH_MAX], jdx_name[PATH_MAX], jdx_path[PATH_MAX];
 char nuc1[20], nuc2[20],au_p[128],cmd_str[256];
 signed int jdx_data=4;
 signed int jdx_type=2;
+signed int copy_flag=0;
 
 GETCURDATA;
-Proc_err (DEF_ERR_OPT, "Usage. Enter the values in the following dialgues. Or you can use the command line options :- \n"
-            "service_to_jcamp X Y\n"
-            "Where X and Y are values you would otherwise enter in the dialogues.\n"
-            "Or :\n service_to_jcamp default \n"
-            "Which runs it with the default values of 2 and 4.\n");
+
 if (i_argc == 2)
-{          
+{  
+   Proc_err (DEF_ERR_OPT, "Usage. Enter the values in the following dialogues. Or you can use the command line options :- \n"
+            "service_to_jcamp X Y Z\n"
+            "Where X,Y & Z are values you would otherwise enter in the dialogues.\n"
+            "Or :\n service_to_jcamp default \n"
+            "Which runs it with the default values of 4, 2 and 1.\n");        
    for (;;)
    {
 	   (void)sprintf(text,"What data would you like to convert to JCamp format? Type -1 (thats minus one) for help.\n", jdx_data);
@@ -47,7 +52,7 @@ if (i_argc == 2)
 
    for (;;)
    {
-	   (void)sprintf(text, "What type of JCamp archive would you like? Type -1 (thats minus one) for help.\n", jdx_data);
+	   (void)sprintf(text, "What type of JCamp archive would you like? Type -1 (thats minus one) for help.\n", jdx_type);
 	   GETINT(text, jdx_type);
 	       if (jdx_type < 0 || jdx_type > 2)
 	       { 
@@ -63,13 +68,24 @@ if (i_argc == 2)
 	     	    /*out of for loop*/
 	       }
    }/*end of for loop)*/
-   
+  for (;;)
+   {
+   	   (void) sprintf(text, "Copy to dataset? 1 for yes, 0 for no\n",copy_flag);
+   	   GETINT(text, copy_flag);
+   	   if (copy_flag !=0 || copy_flag !=1)
+   	   {
+   	   	   break;
+   	   	   /*out of for loop*/
+   	   }
+   } /*end of for loop)*/
+ 
 }/*end of if i_argv == 2*/
 
 if (i_argc == 3) {
 	 /*we'll assume the one argument it was called with was 'default' :) */
 	 jdx_data = 4;
 	 jdx_type = 2;
+	 copy_flag = 1;
 }
 
 if (i_argc == 4) {
@@ -84,8 +100,24 @@ if (i_argc == 4) {
 	 	 exit(1);
 	 }
 }
-
-if (i_argc > 4)
+if (i_argc == 5) {
+	 jdx_data = strtol(i_argv[2], NULL , 10);
+	 jdx_type = strtol(i_argv[3], NULL, 10);
+	 copy_flag = strtol(i_argv[4], NULL, 10);
+	 if (jdx_data < 0 || jdx_data > 6){
+	 	 Proc_err(DEF_ERR_OPT,"Unknown value of jdx_data (=%i)entered on commandline",jdx_data);
+	 	 exit(1);
+	 }
+	 if (jdx_type < 0 || jdx_type > 2){
+	 	 Proc_err(DEF_ERR_OPT,"Unknown value of jdx_type (=%i) entered on commandline",jdx_type);
+	 	 exit(1);
+	 }
+	  if (copy_flag < 0 || copy_flag > 1){
+	 	 Proc_err(DEF_ERR_OPT,"Unknown value of copy_flag (=%i) entered on commandline",copy_flag);
+	 	 exit(1);
+	 }
+}
+if (i_argc > 5)
 {
 	Proc_err(DEF_ERR_OPT,"Unknown arguments used. Aborting...");
   exit(1);	
@@ -93,14 +125,13 @@ if (i_argc > 4)
 
 sprintf( jdx_name, "%s-jcamp-%i-%i.dx",name,jdx_data,jdx_type);
 sprintf( jdx_path, "%s/../jcamp/%s", disk,jdx_name);
-Proc_err(DEF_ERR_OPT, "disk=%s,expname=%s,jdx_name=%s,jdx_path=%s",disk,exp_name,jdx_name,jdx_path);
+Proc_err(DEF_ERR_OPT, "disk=%s,expname=%s,jdx_name=%s,jdx_path=%s",disk,name,jdx_name,jdx_path);
 TOJDX(jdx_path,jdx_data,jdx_type,"*","*","*");
- //Proc_err(DEF_ERR_OPT, "loop=%i,i_expno=%i",loop,i_expno);
-
+if ( (copy_flag==1) || (i_argc == 5) )
+{
+	sprintf( jdx_path,"%s/../%s",ACQUPATH(0),jdx_name);
+	TOJDX(jdx_path,jdx_data,jdx_type,"*","*","*");
+}	
 
 QUIT
-
-#include <stdio.h>
-#include <string.h>
-#include <inc/sysutil>
 
