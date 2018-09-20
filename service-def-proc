@@ -1,5 +1,6 @@
-/*made by GSK originally, slightly modded by DJH at Cambridge UNi*/
+/*made by GSK originally, heavily modded by DJH at Cambridge UNi*/
 /*does default processing of dataset*/
+/*2018 - Sep. Mod to include wet*/
 
 #include <stdio.h>
 #include <inc/sysutil>
@@ -73,6 +74,12 @@ Proc_err(INFO_OPT,"%s",directory);
 			 sprintf(au_p,"service-noesy-proc");
 			 STOREPAR("AUNMP", au_p)
 			 XAU("service-noesy-proc",cmd)
+		 }
+		 if ((strstr(pul, "wet")) )
+		 {
+			 sprintf(au_p,"service-wet-proc");
+			 STOREPAR("AUNMP", au_p)
+			 XAU("service-wet-proc",cmd)
 		 }
 	 }
  next:
